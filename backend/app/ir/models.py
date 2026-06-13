@@ -572,6 +572,21 @@ class TranspileResult(BaseModel):
     doc_references: List[IRDocReference] = Field(default_factory=list)
     ir_snapshot: Optional[Dict[str, Any]] = None  # Serialized IR for debugging
 
+    # Confidence scoring (Phase 8)
+    # HIGH (1.0) → no issues; PARTIAL (0.65-0.99) → warnings exist;
+    # MANUAL_REVIEW (0.50) → unsupported features require human intervention.
+    confidence_score: float = 1.0
+    confidence_level: str = "HIGH"  # "HIGH" | "PARTIAL" | "MANUAL_REVIEW"
+
+    # Named pipeline audit trail — which rule IDs fired during generation
+    applied_rules: List[str] = Field(default_factory=list)
+
+    # Residual validator findings — leftover source-dialect syntax in output
+    residual_warnings: List[IRWarning] = Field(default_factory=list)
+
+    # Latency tracking (filled by the transpiler)
+    elapsed_ms: int = 0
+
 
 # Update forward refs
 IRDataType.model_rebuild()

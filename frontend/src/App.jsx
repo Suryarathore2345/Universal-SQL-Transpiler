@@ -19,6 +19,8 @@ import DialectSelector from './components/DialectSelector.jsx'
 import WarningsPanel from './components/WarningsPanel.jsx'
 import DocRefsPanel from './components/DocRefsPanel.jsx'
 import LimitationsPanel from './components/LimitationsPanel.jsx'
+import ConfidenceBadge from './components/ConfidenceBadge.jsx'
+import ReportDashboard from './components/ReportDashboard.jsx'
 import { fetchDialects, fetchLimitations, transpile } from './api/transpiler.js'
 
 const DEFAULT_SQL = `-- Paste your SQL DDL here
@@ -48,6 +50,12 @@ export default function App() {
   const [error, setError]             = useState(null)
   const [copied, setCopied]           = useState(false)
   const [limitations, setLimitations] = useState([])
+
+  // Phase 8 — confidence + report
+  const [confidenceScore, setConfidenceScore] = useState(null)
+  const [confidenceLevel, setConfidenceLevel] = useState(null)
+  const [lastResult, setLastResult]           = useState(null)
+  const [showReport, setShowReport]           = useState(false)
 
   // Load dialect list on mount
   useEffect(() => {
@@ -83,6 +91,9 @@ export default function App() {
     setWarnings([])
     setUnsupported([])
     setDocRefs([])
+    setConfidenceScore(null)
+    setConfidenceLevel(null)
+    setLastResult(null)
 
     try {
       const result = await transpile({
@@ -94,6 +105,9 @@ export default function App() {
       setWarnings(result.warnings ?? [])
       setUnsupported(result.unsupported_features ?? [])
       setDocRefs(result.doc_references ?? [])
+      setConfidenceScore(result.confidence_score ?? null)
+      setConfidenceLevel(result.confidence_level ?? null)
+      setLastResult(result)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -203,7 +217,7 @@ export default function App() {
             />
           </div>
 
-          {/* Divider + Transpile button */}
+          {/* Divider + Transpile button + Confidence badge */}
           <div className="center-col">
             <button
               className={`btn-transpile ${loading ? 'btn-transpile--loading' : ''}`}
@@ -220,6 +234,13 @@ export default function App() {
                 </>
               )}
             </button>
+            {confidenceScore !== null && !loading && (
+              <ConfidenceBadge
+                score={confidenceScore}
+                level={confidenceLevel}
+                onClick={() => setShowReport(true)}
+              />
+            )}
           </div>
 
           {/* Target */}
@@ -270,7 +291,25 @@ export default function App() {
         <a href="/api/health" target="_blank" rel="noopener noreferrer">API health</a>
         <span className="footer-sep">·</span>
         <a href="/api/docs" target="_blank" rel="noopener noreferrer">OpenAPI</a>
+        {lastResult && (
+          <>
+            <span className="footer-sep">·</span>
+            <button className="footer-report-btn" onClick={() => setShowReport(true)}>
+              View Report
+            </button>
+          </>
+        )}
       </footer>
+
+      {/* ── Report Dashboard modal ── */}
+      {showReport && lastResult && (
+        <ReportDashboard
+          result={lastResult}
+          sourceDialect={dialects.find(d => d.key === sourceDialect)}
+          targetDialect={dialects.find(d => d.key === targetDialect)}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </div>
   )
 }

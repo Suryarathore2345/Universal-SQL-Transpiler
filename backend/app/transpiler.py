@@ -7,6 +7,7 @@ Usage:
 """
 from __future__ import annotations
 
+import time
 from typing import Dict, List, Optional, Type
 
 from app.dialects.base import DialectGenerator, DialectParser
@@ -15,6 +16,7 @@ from app.ir.models import (
     IRProcedure, IRTable, IRView, IRWarning, ObjectType, TranspileResult,
     Warningseverity,
 )
+from app.validator import validate_residuals, compute_confidence
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +104,7 @@ class Transpiler:
         source_dialect: str,
         target_dialect: str,
         object_type: Optional[str] = None,
-    ) -> TranspileResult:
+    ) -> TranspileResult:  # noqa: C901
         """
         Convert SQL DDL from source_dialect to target_dialect.
 
@@ -115,6 +117,8 @@ class Transpiler:
         Returns:
             TranspileResult with converted_sql, warnings, unsupported_features, doc_references.
         """
+        t0 = time.monotonic()
+
         try:
             src = Dialect(source_dialect)
             tgt = Dialect(target_dialect)
@@ -124,6 +128,8 @@ class Transpiler:
                 source_dialect=Dialect.REDSHIFT,
                 target_dialect=Dialect.SNOWFLAKE,
                 object_type=ObjectType.TABLE,
+                confidence_score=0.50,
+                confidence_level="MANUAL_REVIEW",
                 warnings=[IRWarning(
                     feature="INVALID_DIALECT",
                     message=str(e),
@@ -191,21 +197,43 @@ class Transpiler:
         clean_warnings = [w for w in all_warnings if not w.unsupported]
 
         # Deduplicate doc refs by URL
-        seen_urls = set()
+        seen_urls: set = set()
         deduped_refs = []
         for ref in all_doc_refs:
             if ref.url not in seen_urls:
                 seen_urls.add(ref.url)
                 deduped_refs.append(ref)
 
+        # ------------------------------------------------------------------
+        # Phase 8 additions
+        # ------------------------------------------------------------------
+
+        combined_sql = "\n\n".join(output_parts)
+
+        # 1. Residual validator — scan output for leftover source-dialect syntax
+        existing_codes = {w.feature for w in clean_warnings} | {w.feature for w in unsupported}
+        residual_warnings = validate_residuals(combined_sql, src.value, existing_codes)
+
+        # 2. Confidence scoring
+        confidence_score, confidence_level = compute_confidence(
+            clean_warnings, unsupported, residual_warnings
+        )
+
+        # 3. Elapsed time
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+
         return TranspileResult(
-            converted_sql="\n\n".join(output_parts),
+            converted_sql=combined_sql,
             source_dialect=src,
             target_dialect=tgt,
             object_type=ObjectType(object_type) if object_type else detected_object_type,
             warnings=clean_warnings,
             unsupported_features=unsupported,
             doc_references=deduped_refs,
+            residual_warnings=residual_warnings,
+            confidence_score=confidence_score,
+            confidence_level=confidence_level,
+            elapsed_ms=elapsed_ms,
         )
 
     @classmethod

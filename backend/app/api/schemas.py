@@ -75,6 +75,13 @@ class DocReferenceDetail(BaseModel):
 # Main transpile response
 # ---------------------------------------------------------------------------
 
+class ResidualWarningDetail(BaseModel):
+    """A residual source-dialect pattern found in the generated output."""
+    feature: str
+    message: str
+    severity: str = "warning"
+
+
 class TranspileResponse(BaseModel):
     """
     POST /api/transpile  response body.
@@ -91,6 +98,19 @@ class TranspileResponse(BaseModel):
     # Computed convenience fields for the frontend
     warning_count: int = 0
     has_unsupported: bool = False
+
+    # Phase 8 — confidence scoring
+    # HIGH (1.00): clean conversion; PARTIAL (0.65–0.99): warnings present;
+    # MANUAL_REVIEW (0.50): unsupported features require human intervention.
+    confidence_score: float = 1.0
+    confidence_level: str = "HIGH"   # "HIGH" | "PARTIAL" | "MANUAL_REVIEW"
+
+    # Phase 8 — residual validator findings
+    residual_warnings: List[ResidualWarningDetail] = Field(default_factory=list)
+    residual_count: int = 0
+
+    # Phase 8 — latency
+    elapsed_ms: int = 0
 
     @classmethod
     def from_transpile_result(cls, result, include_ir: bool = False) -> "TranspileResponse":
@@ -122,6 +142,14 @@ class TranspileResponse(BaseModel):
             )
             for d in result.doc_references
         ]
+        residuals = [
+            ResidualWarningDetail(
+                feature=w.feature,
+                message=w.message,
+                severity=w.severity.value if hasattr(w.severity, "value") else str(w.severity),
+            )
+            for w in getattr(result, "residual_warnings", [])
+        ]
         ir_snapshot = result.ir_snapshot if include_ir else None
 
         return cls(
@@ -135,6 +163,11 @@ class TranspileResponse(BaseModel):
             ir_snapshot=ir_snapshot,
             warning_count=len(warnings),
             has_unsupported=len(unsupported) > 0,
+            confidence_score=getattr(result, "confidence_score", 1.0),
+            confidence_level=getattr(result, "confidence_level", "HIGH"),
+            residual_warnings=residuals,
+            residual_count=len(residuals),
+            elapsed_ms=getattr(result, "elapsed_ms", 0),
         )
 
 

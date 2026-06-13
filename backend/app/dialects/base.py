@@ -546,3 +546,176 @@ class DialectGenerator(ABC):
         if col.default_value is not None:
             return f" DEFAULT {col.default_value}"
         return ""
+
+    # -----------------------------------------------------------------------
+    # Arg-count aware function conversion utilities (Phase 8)
+    # Borrowed from Redshift-Fabric-Transpiler: handles nested calls correctly
+    # by tracking parenthesis depth so commas inside nested calls are ignored.
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _count_func_args(args_str: str) -> int:
+        """
+        Count the number of top-level comma-separated arguments in a function
+        call's argument string (i.e. the text between the outer parentheses).
+
+        Handles:
+          - Nested function calls: NVL(a, NVL(b, c))  → 2 args
+          - String literals:       NVL('a,b', c)       → 2 args
+          - Empty arg list:        ''                   → 0 args
+
+        Args:
+            args_str: The raw argument text between parentheses, e.g. "a, b, c"
+
+        Returns:
+            Number of top-level arguments.
+        """
+        if not args_str.strip():
+            return 0
+
+        depth = 0
+        in_single = False
+        in_double = False
+        count = 1  # at least one arg if non-empty
+
+        for ch in args_str:
+            if ch == "'" and not in_double:
+                in_single = not in_single
+            elif ch == '"' and not in_single:
+                in_double = not in_double
+            elif not in_single and not in_double:
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                elif ch == ',' and depth == 0:
+                    count += 1
+
+        return count
+
+    @staticmethod
+    def _extract_func_args_str(sql: str, func_name: str, pos: int) -> Optional[str]:
+        """
+        Given a position pointing to the '(' after func_name, extract the
+        content between the outer parentheses.
+
+        Returns the args string, or None if not found.
+        """
+        start = sql.find('(', pos)
+        if start == -1:
+            return None
+        depth = 0
+        in_single = False
+        for i in range(start, len(sql)):
+            ch = sql[i]
+            if ch == "'" :
+                in_single = not in_single
+            elif not in_single:
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth == 0:
+                        return sql[start + 1:i]
+        return None
+
+    def _convert_nvl_aware(self, sql: str) -> str:
+        """
+        Convert NVL(a, b) → ISNULL(a, b) for 2-arg form,
+               NVL(a, b, c, ...) → COALESCE(a, b, c, ...) for 3+ args.
+        Handles nested calls correctly via _count_func_args.
+        Override in dialects that need NVL conversion.
+        """
+        pattern = re.compile(r'\bNVL\s*\(', re.IGNORECASE)
+        result = []
+        last = 0
+        for m in pattern.finditer(sql):
+            args_str = self._extract_func_args_str(sql, "NVL", m.start())
+            if args_str is None:
+                result.append(sql[last:m.end()])
+                last = m.end()
+                continue
+            n_args = self._count_func_args(args_str)
+            func = "ISNULL" if n_args == 2 else "COALESCE"
+            result.append(sql[last:m.start()])
+            result.append(f"{func}({args_str})")
+            last = m.start() + len(m.group()) + len(args_str) + 1  # skip closing )
+        result.append(sql[last:])
+        return "".join(result)
+
+    def _convert_decode_to_case(self, sql: str) -> str:
+        """
+        Convert Oracle DECODE(expr, v1, r1, v2, r2, ..., [default])
+        to CASE WHEN expr=v1 THEN r1 WHEN expr=v2 THEN r2 ... [ELSE default] END.
+        Uses _count_func_args to correctly count arguments.
+        """
+        pattern = re.compile(r'\bDECODE\s*\(', re.IGNORECASE)
+        result = []
+        last = 0
+        for m in pattern.finditer(sql):
+            args_str = self._extract_func_args_str(sql, "DECODE", m.start())
+            if args_str is None:
+                result.append(sql[last:m.end()])
+                last = m.end()
+                continue
+
+            # Split args at top-level commas
+            args = self._split_top_level(args_str)
+            if len(args) < 3:
+                # Can't convert malformed DECODE — leave as-is
+                result.append(sql[last:m.end()])
+                last = m.end()
+                continue
+
+            expr = args[0].strip()
+            pairs = args[1:]
+            case_parts = [f"CASE"]
+            i = 0
+            while i + 1 < len(pairs):
+                val = pairs[i].strip()
+                res = pairs[i + 1].strip()
+                case_parts.append(f"  WHEN {expr} = {val} THEN {res}")
+                i += 2
+            if i < len(pairs):
+                case_parts.append(f"  ELSE {pairs[i].strip()}")
+            case_parts.append("END")
+            case_sql = "\n".join(case_parts)
+
+            result.append(sql[last:m.start()])
+            result.append(case_sql)
+            # Advance past the closing paren
+            last = m.start() + len(m.group()) + len(args_str) + 1
+        result.append(sql[last:])
+        return "".join(result)
+
+    @staticmethod
+    def _split_top_level(s: str) -> List[str]:
+        """Split s on commas at depth 0 (ignoring nested parens and strings)."""
+        parts = []
+        current: List[str] = []
+        depth = 0
+        in_single = False
+        for ch in s:
+            if ch == "'" and not in_single:
+                in_single = True
+                current.append(ch)
+            elif ch == "'" and in_single:
+                in_single = False
+                current.append(ch)
+            elif not in_single:
+                if ch == '(':
+                    depth += 1
+                    current.append(ch)
+                elif ch == ')':
+                    depth -= 1
+                    current.append(ch)
+                elif ch == ',' and depth == 0:
+                    parts.append("".join(current))
+                    current = []
+                else:
+                    current.append(ch)
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
