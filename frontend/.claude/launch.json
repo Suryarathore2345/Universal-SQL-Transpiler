@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "UST Frontend",
+      "runtimeExecutable": "C:\\Users\\SuryadevRathore\\node\\npm.cmd",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    }
+  ]
+}

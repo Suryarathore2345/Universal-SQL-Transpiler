@@ -1,0 +1,1326 @@
+# Universal SQL Transpiler — Type Mapping Matrix
+#
+# Every entry maps a GenericType (from ir/models.py) to its native representation
+# in each of the 8 supported dialects.
+#
+# Structure per dialect entry:
+#   type:        Primary/recommended type expression to EMIT when generating SQL
+#   aliases:     Alternative names the PARSER should recognise from source SQL
+#   max_length:  Maximum allowed length/precision (null = platform default)
+#   notes:       Human-readable caveat
+#   doc_url:     Official documentation page this mapping was sourced from
+#   confidence:  "verified" (from official docs) | "unverified" (community source, needs human review)
+#
+# Sources (all verified June 2026):
+#   Redshift:    https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html
+#   Snowflake:   https://docs.snowflake.com/en/sql-reference/intro-summary-data-types
+#   BigQuery:    https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types
+#   Databricks:  https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html
+#   SQL Server:  https://learn.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql
+#   Fabric DW:   https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types
+#   Synapse:     https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types
+#   Oracle:      https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html
+
+generic_types:
+
+  # ── Integers ──────────────────────────────────────────────────────────────
+
+  INT8:
+    description: "8-bit (1-byte) signed integer — TINYINT (0-255 in T-SQL, signed in others)"
+    dialects:
+      redshift:
+        type: "INT2"
+        aliases: []
+        notes: "Redshift has no TINYINT; emit as INT2 (alias of SMALLINT). Widening conversion. Do not list SMALLINT here — SMALLINT source should parse as INT16."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "TINYINT"
+        aliases: ["BYTEINT", "NUMBER(3,0)"]
+        notes: "Snowflake TINYINT is an alias for NUMBER(38,0); effectively stored as 38-digit precision."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "INT64"
+        aliases: ["INT", "SMALLINT", "INTEGER", "BIGINT", "TINYINT", "BYTEINT"]
+        notes: "BigQuery has only INT64 for all integer sizes."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
+        confidence: verified
+      databricks:
+        type: "TINYINT"
+        aliases: ["BYTE"]
+        notes: "Databricks TINYINT is a true 1-byte signed integer."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "TINYINT"
+        aliases: []
+        notes: "SQL Server TINYINT is 0-255 unsigned 1-byte."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "SMALLINT"
+        aliases: []
+        notes: "Fabric DW does not support TINYINT for table columns; smallest is SMALLINT. See unsupported types."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "SMALLINT"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      synapse:
+        type: "TINYINT"
+        aliases: []
+        notes: "Synapse dedicated SQL pool supports TINYINT."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      oracle:
+        type: "NUMBER(3)"
+        aliases: []
+        notes: "Oracle has no TINYINT; NUMBER(3) holds 0-127. For signed byte use NUMBER(3)."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  INT16:
+    description: "16-bit (2-byte) signed integer — SMALLINT"
+    dialects:
+      redshift:
+        type: "SMALLINT"
+        aliases: ["INT2"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "SMALLINT"
+        aliases: ["NUMBER(5,0)", "INT2"]
+        notes: "Snowflake SMALLINT stored as NUMBER(38,0) internally."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "INT64"
+        aliases: ["INT", "SMALLINT", "INTEGER", "BIGINT", "TINYINT", "BYTEINT"]
+        notes: "BigQuery uses INT64 for all integer sizes."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
+        confidence: verified
+      databricks:
+        type: "SMALLINT"
+        aliases: ["SHORT"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "SMALLINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "SMALLINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "SMALLINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      oracle:
+        type: "NUMBER(5)"
+        aliases: ["SMALLINT"]
+        notes: "Oracle SMALLINT is an ANSI alias for NUMBER(38); use NUMBER(5) for true 16-bit range."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  INT32:
+    description: "32-bit (4-byte) signed integer — INT / INTEGER"
+    dialects:
+      redshift:
+        type: "INTEGER"
+        aliases: ["INT", "INT4"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "INTEGER"
+        aliases: ["INT", "INT4", "SIGNED"]
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "INT64"
+        aliases: ["INT", "INTEGER", "SMALLINT", "BIGINT", "TINYINT", "BYTEINT"]
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
+        confidence: verified
+      databricks:
+        type: "INT"
+        aliases: ["INTEGER"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "INT"
+        aliases: ["INTEGER"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "INT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "INT"
+        aliases: ["INTEGER"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      oracle:
+        type: "NUMBER(10)"
+        aliases: ["INTEGER", "INT"]
+        notes: "Oracle INTEGER is an ANSI alias for NUMBER(38). Use NUMBER(10) for true 32-bit range."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  INT64:
+    description: "64-bit (8-byte) signed integer — BIGINT"
+    dialects:
+      redshift:
+        type: "BIGINT"
+        aliases: ["INT8"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "BIGINT"
+        aliases: ["NUMBER(19,0)", "INT8"]
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "INT64"
+        aliases: ["INT", "INTEGER", "SMALLINT", "BIGINT", "TINYINT", "BYTEINT"]
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
+        confidence: verified
+      databricks:
+        type: "BIGINT"
+        aliases: ["LONG"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "BIGINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "BIGINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "BIGINT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql"
+        confidence: verified
+      oracle:
+        type: "NUMBER(19)"
+        aliases: []
+        notes: "Oracle has no BIGINT; use NUMBER(19) for 64-bit signed integer range."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Exact Numeric ─────────────────────────────────────────────────────────
+
+  DECIMAL:
+    description: "Exact fixed-point numeric — DECIMAL(p,s) / NUMERIC(p,s)"
+    default_precision: 18
+    default_scale: 0
+    dialects:
+      redshift:
+        type: "DECIMAL"
+        aliases: ["NUMERIC"]
+        max_precision: 38
+        notes: "Redshift DECIMAL max precision 38."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "NUMBER"
+        aliases: ["DECIMAL", "NUMERIC"]
+        max_precision: 38
+        notes: "Snowflake NUMBER(p,s) max precision 38."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "NUMERIC"
+        aliases: ["DECIMAL"]
+        max_precision: 29
+        max_scale: 9
+        notes: "BigQuery NUMERIC max precision 29, max scale 9. For larger: use BIGNUMERIC (76,38)."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#decimal_type"
+        confidence: verified
+        bignumeric_type: "BIGNUMERIC"
+        bignumeric_max_precision: 76
+        bignumeric_max_scale: 38
+      databricks:
+        type: "DECIMAL"
+        aliases: ["NUMERIC", "DEC"]
+        max_precision: 38
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "DECIMAL"
+        aliases: ["NUMERIC"]
+        max_precision: 38
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DECIMAL"
+        aliases: ["NUMERIC"]
+        max_precision: 38
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "DECIMAL"
+        aliases: ["NUMERIC"]
+        max_precision: 38
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql"
+        confidence: verified
+      oracle:
+        type: "NUMBER"
+        aliases: ["DECIMAL", "NUMERIC", "DEC"]
+        max_precision: 38
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Floating Point ────────────────────────────────────────────────────────
+
+  FLOAT32:
+    description: "32-bit (4-byte) single-precision IEEE floating-point — REAL / FLOAT4"
+    dialects:
+      redshift:
+        type: "REAL"
+        aliases: ["FLOAT4"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "FLOAT"
+        aliases: ["FLOAT4", "REAL"]
+        notes: "Snowflake FLOAT4 is stored as 64-bit double internally; no true 32-bit float."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "FLOAT64"
+        aliases: ["FLOAT"]
+        notes: "BigQuery only has FLOAT64; no 32-bit float type."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#floating_point_type"
+        confidence: verified
+      databricks:
+        type: "FLOAT"
+        aliases: ["REAL"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "REAL"
+        aliases: ["FLOAT(24)"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/float-and-real-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "REAL"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "REAL"
+        aliases: ["FLOAT(24)"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/float-and-real-transact-sql"
+        confidence: verified
+      oracle:
+        type: "BINARY_FLOAT"
+        aliases: []
+        notes: "Oracle BINARY_FLOAT is a 32-bit IEEE single-precision float."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  FLOAT64:
+    description: "64-bit (8-byte) double-precision IEEE floating-point — FLOAT / DOUBLE PRECISION"
+    dialects:
+      redshift:
+        type: "DOUBLE PRECISION"
+        aliases: ["FLOAT8", "FLOAT"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
+        confidence: verified
+      snowflake:
+        type: "DOUBLE"
+        aliases: ["DOUBLE PRECISION", "FLOAT", "FLOAT8", "REAL"]
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-numeric"
+        confidence: verified
+      bigquery:
+        type: "FLOAT64"
+        aliases: ["FLOAT"]
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#floating_point_type"
+        confidence: verified
+      databricks:
+        type: "DOUBLE"
+        aliases: []
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "FLOAT"
+        aliases: ["FLOAT(53)", "DOUBLE PRECISION"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/float-and-real-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "FLOAT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "FLOAT"
+        aliases: ["FLOAT(53)"]
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/float-and-real-transact-sql"
+        confidence: verified
+      oracle:
+        type: "BINARY_DOUBLE"
+        aliases: []
+        notes: "Oracle BINARY_DOUBLE is a 64-bit IEEE double. FLOAT(p) is a subtype of NUMBER, not IEEE."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── String ────────────────────────────────────────────────────────────────
+
+  CHAR:
+    description: "Fixed-length character string — CHAR(n)"
+    dialects:
+      redshift:
+        type: "CHAR"
+        aliases: ["CHARACTER", "NCHAR", "BPCHAR"]
+        max_length: 4096
+        notes: "Redshift CHAR max 4096 bytes; CHAR doesn't support multibyte."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html"
+        confidence: verified
+      snowflake:
+        type: "CHAR"
+        aliases: ["CHARACTER"]
+        notes: "Snowflake CHAR is an alias for VARCHAR; trailing spaces not preserved."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "STRING"
+        aliases: []
+        notes: "BigQuery has no CHAR type; maps to STRING. Length constraint not enforced."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
+        confidence: verified
+      databricks:
+        type: "CHAR"
+        aliases: ["CHARACTER"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "CHAR"
+        aliases: ["CHARACTER"]
+        max_length: 8000
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "CHAR"
+        aliases: []
+        notes: "Fabric DW supports CHAR but not NCHAR (use CHAR with UTF-8 collation)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "CHAR"
+        aliases: []
+        max_length: 8000
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
+        confidence: verified
+      oracle:
+        type: "CHAR"
+        aliases: []
+        max_length: 2000
+        notes: "Oracle CHAR max 2000 bytes. Uses blank-padding comparison semantics."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  VARCHAR:
+    description: "Variable-length character string with length bound — VARCHAR(n)"
+    dialects:
+      redshift:
+        type: "VARCHAR"
+        aliases: ["CHARACTER VARYING", "NVARCHAR", "TEXT"]
+        max_length: 65535
+        notes: "Redshift VARCHAR max 65535 bytes. TEXT is an alias for VARCHAR(256)."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html"
+        confidence: verified
+      snowflake:
+        type: "VARCHAR"
+        aliases: ["STRING", "TEXT", "NVARCHAR", "CHAR VARYING"]
+        max_length: 16777216
+        notes: "Snowflake VARCHAR max 16MB (16,777,216 chars). Default length is max."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "STRING"
+        aliases: ["VARCHAR"]
+        notes: "BigQuery STRING is variable-length; no length limit. VARCHAR is an alias."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
+        confidence: verified
+      databricks:
+        type: "STRING"
+        aliases: ["VARCHAR", "CHAR VARYING"]
+        notes: "Databricks STRING has no length limit. VARCHAR(n) is supported for compatibility."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "VARCHAR"
+        aliases: ["CHARACTER VARYING"]
+        max_length: 8000
+        notes: "Use NVARCHAR for Unicode. VARCHAR(MAX) = up to 2GB."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARCHAR"
+        aliases: []
+        max_length_max: "16MB"
+        notes: "Fabric DW VARCHAR(MAX) limited to 16MB. NVARCHAR not supported — use VARCHAR."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "VARCHAR"
+        aliases: ["NVARCHAR"]
+        notes: "Synapse supports NVARCHAR; prefer VARCHAR for performance per MS docs."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+      oracle:
+        type: "VARCHAR2"
+        aliases: ["VARCHAR"]
+        max_length: 32767
+        notes: "Oracle VARCHAR2 max 32767 (extended) / 4000 (standard MAX_STRING_SIZE). VARCHAR is deprecated alias."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  TEXT:
+    description: "Unbounded / max-length character string — TEXT / VARCHAR(MAX) / CLOB"
+    dialects:
+      redshift:
+        type: "VARCHAR(65535)"
+        aliases: ["TEXT"]
+        notes: "Redshift TEXT = VARCHAR(256). For max: use VARCHAR(65535)."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html"
+        confidence: verified
+      snowflake:
+        type: "TEXT"
+        aliases: ["STRING", "VARCHAR"]
+        notes: "Snowflake TEXT = VARCHAR with default max length (16MB)."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "STRING"
+        aliases: []
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
+        confidence: verified
+      databricks:
+        type: "STRING"
+        aliases: []
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "VARCHAR(MAX)"
+        aliases: ["TEXT", "NVARCHAR(MAX)", "NTEXT"]
+        notes: "TEXT/NTEXT deprecated; use VARCHAR(MAX). Max 2GB."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        aliases: []
+        notes: "Fabric DW VARCHAR(MAX) capped at 16MB. TEXT/NTEXT not supported — use VARCHAR."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "VARCHAR(MAX)"
+        aliases: []
+        notes: "Synapse: text/ntext unsupported; use VARCHAR(MAX). Prefer VARCHAR(8000) for perf."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+      oracle:
+        type: "CLOB"
+        aliases: ["LONG"]
+        notes: "Oracle CLOB for unbounded text. LONG is deprecated."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Boolean ───────────────────────────────────────────────────────────────
+
+  BOOLEAN:
+    description: "Logical Boolean — TRUE / FALSE / NULL"
+    dialects:
+      redshift:
+        type: "BOOLEAN"
+        aliases: ["BOOL"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Boolean_type.html"
+        confidence: verified
+      snowflake:
+        type: "BOOLEAN"
+        aliases: ["BOOL"]
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-logical"
+        confidence: verified
+      bigquery:
+        type: "BOOL"
+        aliases: ["BOOLEAN"]
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#boolean_type"
+        confidence: verified
+      databricks:
+        type: "BOOLEAN"
+        aliases: ["BOOL"]
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "BIT"
+        aliases: []
+        notes: "SQL Server BIT stores 0/1/NULL; no true BOOLEAN type."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/bit-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "BIT"
+        aliases: []
+        notes: "Fabric DW uses BIT (0/1/NULL) for boolean."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "BIT"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/bit-transact-sql"
+        confidence: verified
+      oracle:
+        type: "BOOLEAN"
+        aliases: ["BOOL"]
+        notes: "Oracle BOOLEAN native support added in Oracle 21c. For older versions use NUMBER(1) CHECK (col IN (0,1))."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+        oracle_legacy_fallback: "NUMBER(1)"
+
+  # ── Date & Time ───────────────────────────────────────────────────────────
+
+  DATE:
+    description: "Calendar date (year, month, day) without time component"
+    dialects:
+      redshift:
+        type: "DATE"
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "DATE"
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+      bigquery:
+        type: "DATE"
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#date_type"
+        confidence: verified
+      databricks:
+        type: "DATE"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "DATE"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/date-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DATE"
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "DATE"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/date-transact-sql"
+        confidence: verified
+      oracle:
+        type: "DATE"
+        notes: "Oracle DATE includes time components (hour, minute, second). Use TRUNC() to get date-only."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  TIMESTAMP:
+    description: "Date and time without time zone"
+    default_precision: 6
+    dialects:
+      redshift:
+        type: "TIMESTAMP"
+        aliases: ["TIMESTAMP WITHOUT TIME ZONE"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "TIMESTAMP_NTZ"
+        aliases: ["TIMESTAMPNTZ", "DATETIME", "TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMP"]
+        notes: "Snowflake TIMESTAMP_NTZ is timezone-agnostic. TIMESTAMP alias depends on session parameter. TIMESTAMPNTZ is the sqlglot-normalized form."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+      bigquery:
+        type: "DATETIME"
+        aliases: []
+        notes: "BigQuery DATETIME has no timezone. TIMESTAMP in BigQuery is always UTC-based."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#datetime_type"
+        confidence: verified
+      databricks:
+        type: "TIMESTAMP_NTZ"
+        aliases: ["TIMESTAMP WITHOUT TIME ZONE"]
+        notes: "Databricks TIMESTAMP_NTZ added for timezone-agnostic. TIMESTAMP is session-timezone-aware."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "DATETIME2"
+        aliases: ["DATETIME2(6)"]
+        notes: "SQL Server DATETIME2(0-7) is the modern timestamp. DATETIME is legacy with lower precision."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetime2-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DATETIME2"
+        aliases: []
+        notes: "Fabric DW DATETIME2 precision limited to 6 digits. DATETIME not supported."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "DATETIME2"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetime2-transact-sql"
+        confidence: verified
+      oracle:
+        type: "TIMESTAMP"
+        aliases: ["TIMESTAMP(6)"]
+        notes: "Oracle TIMESTAMP(n) stores date+time without timezone (n=0..9 fractional seconds)."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  TIMESTAMP_TZ:
+    description: "Date and time with explicit timezone offset"
+    dialects:
+      redshift:
+        type: "TIMESTAMPTZ"
+        aliases: ["TIMESTAMP WITH TIME ZONE", "TIMESTAMP_TZ"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "TIMESTAMP_TZ"
+        aliases: ["TIMESTAMP WITH TIME ZONE"]
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+      bigquery:
+        type: "TIMESTAMP"
+        aliases: []
+        notes: "BigQuery TIMESTAMP is always UTC-normalized with timezone offset stored."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#timestamp_type"
+        confidence: verified
+      databricks:
+        type: "TIMESTAMP"
+        aliases: ["TIMESTAMP WITH TIME ZONE"]
+        notes: "Databricks TIMESTAMP uses session timezone. TIMESTAMP WITH TIME ZONE is supported syntax."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "DATETIMEOFFSET"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DATETIME2"
+        aliases: []
+        notes: "Fabric DW does not support DATETIMEOFFSET for table columns. Falls back to DATETIME2 with warning. See: https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "DATETIME2"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      synapse:
+        type: "DATETIMEOFFSET"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      oracle:
+        type: "TIMESTAMP WITH TIME ZONE"
+        aliases: ["TIMESTAMP(6) WITH TIME ZONE"]
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  TIMESTAMP_LTZ:
+    description: "Timestamp with local/session timezone conversion"
+    dialects:
+      redshift:
+        type: "TIMESTAMPTZ"
+        aliases: []
+        notes: "Redshift TIMESTAMPTZ converts to session timezone on retrieval."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "TIMESTAMP_LTZ"
+        aliases: []
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+      bigquery:
+        type: "TIMESTAMP"
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#timestamp_type"
+        confidence: verified
+      databricks:
+        type: "TIMESTAMP"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "DATETIMEOFFSET"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DATETIME2"
+        notes: "DATETIMEOFFSET not supported in Fabric DW tables; use DATETIME2."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "DATETIME2"
+      synapse:
+        type: "DATETIMEOFFSET"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      oracle:
+        type: "TIMESTAMP WITH LOCAL TIME ZONE"
+        aliases: []
+        notes: "Oracle TIMESTAMP WITH LOCAL TIME ZONE stores in DB timezone, displays in session timezone."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  TIME:
+    description: "Time of day without timezone"
+    dialects:
+      redshift:
+        type: "TIME"
+        aliases: ["TIME WITHOUT TIME ZONE"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "TIME"
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+      bigquery:
+        type: "TIME"
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#time_type"
+        confidence: verified
+      databricks:
+        type: "STRING"
+        notes: "Databricks has no TIME type; store as STRING 'HH:MM:SS' or use TIMESTAMP with a fixed date."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      sqlserver:
+        type: "TIME"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/time-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "TIME"
+        notes: "Fabric DW TIME precision limited to 6."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "TIME"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/time-transact-sql"
+        confidence: verified
+      oracle:
+        type: "TIMESTAMP"
+        notes: "Oracle has no TIME type; use TIMESTAMP with a fixed date epoch or INTERVAL DAY TO SECOND."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+        unsupported: true
+        fallback: "TIMESTAMP"
+
+  # ── Binary ────────────────────────────────────────────────────────────────
+
+  VARBINARY:
+    description: "Variable-length binary data"
+    dialects:
+      redshift:
+        type: "VARBYTE"
+        aliases: ["VARBINARY", "BINARY VARYING"]
+        notes: "Redshift VARBYTE is variable-length binary; max size is function of cluster."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_VARBYTE_type.html"
+        confidence: verified
+      snowflake:
+        type: "VARBINARY"
+        aliases: ["BINARY"]
+        max_length: 8388608
+        notes: "Snowflake VARBINARY max 8MB."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "BYTES"
+        aliases: []
+        notes: "BigQuery BYTES is variable-length binary; max 2MB in a field."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#bytes_type"
+        confidence: verified
+      databricks:
+        type: "BINARY"
+        aliases: []
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "VARBINARY"
+        aliases: ["VARBINARY(MAX)"]
+        max_length: 8000
+        notes: "VARBINARY(MAX) up to 2GB. IMAGE type is deprecated."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARBINARY"
+        aliases: []
+        notes: "Fabric DW VARBINARY(MAX) limited to 16MB."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "VARBINARY"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      oracle:
+        type: "RAW"
+        aliases: ["VARBINARY"]
+        max_length: 32767
+        notes: "Oracle RAW(n) max 32767 (extended) / 2000 (standard). For larger: use BLOB."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  BLOB:
+    description: "Binary large object — for large binary data"
+    dialects:
+      redshift:
+        type: "VARBYTE"
+        notes: "Redshift has no BLOB; use VARBYTE for variable binary. Very large binaries should be stored in S3."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_VARBYTE_type.html"
+        confidence: verified
+      snowflake:
+        type: "VARBINARY"
+        notes: "Snowflake max VARBINARY is 8MB; for larger use stage files."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "BYTES"
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#bytes_type"
+        confidence: verified
+      databricks:
+        type: "BINARY"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "VARBINARY(MAX)"
+        aliases: ["IMAGE"]
+        notes: "IMAGE deprecated; use VARBINARY(MAX) up to 2GB."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARBINARY(MAX)"
+        notes: "Fabric DW VARBINARY(MAX) max 16MB."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "VARBINARY(MAX)"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      oracle:
+        type: "BLOB"
+        notes: "Oracle BLOB up to (4GB-1)*chunk. For external files use BFILE."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Semi-Structured ───────────────────────────────────────────────────────
+
+  JSON:
+    description: "Native JSON / semi-structured document type"
+    dialects:
+      redshift:
+        type: "SUPER"
+        aliases: []
+        notes: "Redshift SUPER is a superset type that handles JSON, arrays, structs. Use PartiQL for querying."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_SUPER_type.html"
+        confidence: verified
+      snowflake:
+        type: "VARIANT"
+        aliases: []
+        notes: "Snowflake VARIANT holds JSON, XML, or any semi-structured data."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "JSON"
+        aliases: []
+        notes: "BigQuery native JSON type added in 2022."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#json_type"
+        confidence: verified
+      databricks:
+        type: "VARIANT"
+        aliases: []
+        notes: "Databricks VARIANT (semi-structured) for JSON. Alternatively STRING with JSON functions."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "NVARCHAR(MAX)"
+        aliases: ["VARCHAR(MAX)"]
+        notes: "SQL Server stores JSON as NVARCHAR(MAX)/VARCHAR(MAX) + JSON functions (ISJSON, JSON_VALUE, etc.). No native JSON column type for tables (json type is for variables/expressions only)."
+        doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+        confidence: verified
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "Fabric DW: JSON type not supported for tables; use VARCHAR(MAX). See unsupported types."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "Synapse stores JSON as NVARCHAR(MAX) with JSON functions."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+      oracle:
+        type: "JSON"
+        aliases: []
+        notes: "Oracle native JSON type available from Oracle 21c. For 19c/18c use VARCHAR2(32767) or CLOB with IS JSON constraint."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+        oracle_legacy_fallback: "CLOB CHECK (col IS JSON)"
+
+  VARIANT:
+    description: "Semi-structured data type for JSON/XML/arrays/objects (Snowflake/Databricks/Redshift SUPER)"
+    dialects:
+      redshift:
+        type: "SUPER"
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_SUPER_type.html"
+        confidence: verified
+      snowflake:
+        type: "VARIANT"
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "JSON"
+        notes: "BigQuery JSON is closest equivalent to VARIANT."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#json_type"
+        confidence: verified
+      databricks:
+        type: "VARIANT"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "NVARCHAR(MAX)"
+        notes: "No native VARIANT; store as NVARCHAR(MAX) and use JSON functions."
+        doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "No native VARIANT; use VARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "No native VARIANT; use NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      oracle:
+        type: "JSON"
+        notes: "Oracle 21c+ JSON type is closest. For older use CLOB."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Complex Types ─────────────────────────────────────────────────────────
+
+  ARRAY:
+    description: "Ordered collection of elements — ARRAY<T>"
+    dialects:
+      redshift:
+        type: "SUPER"
+        notes: "Redshift SUPER can hold arrays via PartiQL. No native ARRAY<T> declaration."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_SUPER_type.html"
+        confidence: verified
+        unsupported: true
+        fallback: "SUPER"
+      snowflake:
+        type: "ARRAY"
+        notes: "Snowflake ARRAY is untyped semi-structured."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "ARRAY"
+        notes: "BigQuery ARRAY<T> with typed elements. Arrays cannot contain NULLs."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#array_type"
+        confidence: verified
+      databricks:
+        type: "ARRAY"
+        notes: "Databricks ARRAY<elementType> with typed elements."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "NVARCHAR(MAX)"
+        notes: "SQL Server has no ARRAY type. Store as JSON array in NVARCHAR(MAX) and use OPENJSON() to unnest."
+        doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "No ARRAY type. Store as JSON in VARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "No ARRAY type. Store as JSON array in NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      oracle:
+        type: "JSON"
+        notes: "Oracle 21c JSON type supports arrays. Older versions: use CLOB with nested table or VARRAY DDL."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  STRUCT:
+    description: "Named-field composite / record type — STRUCT<field: type, ...>"
+    dialects:
+      redshift:
+        type: "SUPER"
+        notes: "Redshift SUPER represents structs via PartiQL."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_SUPER_type.html"
+        confidence: verified
+        unsupported: true
+        fallback: "SUPER"
+      snowflake:
+        type: "OBJECT"
+        notes: "Snowflake OBJECT is an untyped semi-structured map/struct."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "STRUCT"
+        notes: "BigQuery STRUCT<field: type, ...> with typed named fields."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#struct_type"
+        confidence: verified
+      databricks:
+        type: "STRUCT"
+        notes: "Databricks STRUCT<fieldName: fieldType [NOT NULL], ...>."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "NVARCHAR(MAX)"
+        notes: "No STRUCT type. Store as JSON in NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "No STRUCT type. Store as JSON in VARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "No STRUCT type. Store as JSON in NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      oracle:
+        type: "JSON"
+        notes: "Oracle 21c JSON holds structured objects. For strong typing use Oracle OBJECT TYPE."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Identifier ────────────────────────────────────────────────────────────
+
+  UUID:
+    description: "Universally unique identifier — UUID / UNIQUEIDENTIFIER"
+    dialects:
+      redshift:
+        type: "VARCHAR(36)"
+        notes: "Redshift has no UUID type. Store as VARCHAR(36) and generate with CONCAT of random hex."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(36)"
+      snowflake:
+        type: "VARCHAR(36)"
+        aliases: ["STRING"]
+        notes: "Snowflake has no UUID type; store as VARCHAR(36). Generate with UUID_STRING()."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/functions/uuid_string"
+        confidence: verified
+      bigquery:
+        type: "STRING"
+        notes: "BigQuery: no UUID type; use STRING and GENERATE_UUID() function."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/functions-and-operators#generate_uuid"
+        confidence: verified
+      databricks:
+        type: "STRING"
+        notes: "Databricks: no UUID type; use STRING and uuid() function."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/functions/uuid.html"
+        confidence: verified
+      sqlserver:
+        type: "UNIQUEIDENTIFIER"
+        aliases: []
+        notes: "SQL Server UNIQUEIDENTIFIER = 16-byte GUID. Generate with NEWID()."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/uniqueidentifier-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "UNIQUEIDENTIFIER"
+        notes: "Fabric DW supports UNIQUEIDENTIFIER but stores as binary in Parquet."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      synapse:
+        type: "UNIQUEIDENTIFIER"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/uniqueidentifier-transact-sql"
+        confidence: verified
+      oracle:
+        type: "RAW(16)"
+        aliases: []
+        notes: "Oracle: store UUID as RAW(16) or VARCHAR2(36). Generate with SYS_GUID()."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/SYS_GUID.html"
+        confidence: verified
+
+  # ── Spatial ───────────────────────────────────────────────────────────────
+
+  GEOGRAPHY:
+    description: "Geographic spatial data (longitude/latitude on sphere)"
+    dialects:
+      redshift:
+        type: "GEOGRAPHY"
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html"
+        confidence: verified
+      snowflake:
+        type: "GEOGRAPHY"
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-geospatial"
+        confidence: verified
+      bigquery:
+        type: "GEOGRAPHY"
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#geography_type"
+        confidence: verified
+      databricks:
+        type: "GEOGRAPHY"
+        notes: "Databricks GEOGRAPHY type added in recent runtime versions."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "geography"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/spatial-geography/spatial-types-geography"
+        confidence: verified
+      fabric_dw:
+        type: "VARBINARY"
+        notes: "Fabric DW does not support geography type. Store as VARBINARY (WKB) or VARCHAR(WKT). See: https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARBINARY"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      synapse:
+        type: "VARBINARY"
+        notes: "Synapse dedicated pool does not support geography; use varbinary. See: https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARBINARY"
+        fallback_doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+      oracle:
+        type: "SDO_GEOMETRY"
+        notes: "Oracle Spatial uses SDO_GEOMETRY. For geographic: use SDO_CS with SRID 4326."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  GEOMETRY:
+    description: "Geometric spatial data (flat/Cartesian plane)"
+    dialects:
+      redshift:
+        type: "GEOMETRY"
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html"
+        confidence: verified
+      snowflake:
+        type: "GEOMETRY"
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-geospatial"
+        confidence: verified
+      bigquery:
+        type: "GEOGRAPHY"
+        notes: "BigQuery only has GEOGRAPHY (not GEOMETRY). Planar geometry needs coordinate projection."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#geography_type"
+        confidence: verified
+      databricks:
+        type: "GEOMETRY"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "geometry"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/spatial-geometry/spatial-types-geometry-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARBINARY"
+        notes: "Fabric DW does not support geometry. Store as VARBINARY (WKB) or VARCHAR(WKT)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARBINARY"
+      synapse:
+        type: "VARBINARY"
+        notes: "Synapse dedicated pool does not support geometry; use varbinary."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARBINARY"
+      oracle:
+        type: "SDO_GEOMETRY"
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+
+# ── Identity / Auto-Increment mechanism reference ─────────────────────────
+#
+# Not a data type but included here as a structural reference.
+# Full syntax verified from official docs.
+#
+identity_mechanisms:
+  redshift:
+    syntax: "column_name type IDENTITY(seed, step)"
+    example: "id INTEGER IDENTITY(1,1)"
+    notes: "Redshift IDENTITY generates sequential values. Cannot manually INSERT into IDENTITY column without OVERRIDING SYSTEM VALUE."
+    doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html"
+    confidence: verified
+
+  snowflake:
+    syntax: "column_name type AUTOINCREMENT | IDENTITY [(start, increment)]"
+    example: "id INTEGER AUTOINCREMENT"
+    notes: "Snowflake AUTOINCREMENT / IDENTITY. Default start=1, increment=1."
+    doc_url: "https://docs.snowflake.com/en/sql-reference/sql/create-table"
+    confidence: verified
+
+  bigquery:
+    syntax: null
+    notes: "BigQuery has no native IDENTITY or sequence. Common patterns: (1) use GENERATE_UUID() as default, (2) maintain a sequence table + stored procedure, (3) use row numbering in views. All patterns require application-level logic."
+    fallback_type: "STRING DEFAULT (GENERATE_UUID())"
+    fallback_doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/functions-and-operators#generate_uuid"
+    unsupported: true
+    confidence: verified
+
+  databricks:
+    syntax: "column_name BIGINT GENERATED ALWAYS AS IDENTITY [(START WITH n INCREMENT BY n)]"
+    example: "id BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1)"
+    notes: "Databricks GENERATED ALWAYS AS IDENTITY for Delta tables only."
+    doc_url: "https://docs.databricks.com/en/delta/generated-columns.html"
+    confidence: verified
+
+  sqlserver:
+    syntax: "column_name type IDENTITY(seed, increment)"
+    example: "id INT IDENTITY(1,1)"
+    doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/functions/identity-function-transact-sql"
+    confidence: verified
+
+  fabric_dw:
+    syntax: "column_name type IDENTITY(seed, increment)"
+    example: "id INT IDENTITY(1,1)"
+    notes: "Fabric DW supports IDENTITY columns for INT, BIGINT, SMALLINT, DECIMAL, NUMERIC."
+    doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/create-table"
+    confidence: verified
+
+  synapse:
+    syntax: "column_name type IDENTITY(seed, increment)"
+    example: "id INT IDENTITY(1,1)"
+    doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-azure-sql-data-warehouse"
+    confidence: verified
+
+  oracle:
+    syntax: "column_name type GENERATED [ALWAYS | BY DEFAULT [ON NULL]] AS IDENTITY [(START WITH n INCREMENT BY n)]"
+    example: "id NUMBER GENERATED ALWAYS AS IDENTITY START WITH 1 INCREMENT BY 1"
+    notes: "Oracle 12c+ supports IDENTITY columns. Earlier versions require explicit sequence + trigger."
+    doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-TABLE.html"
+    confidence: verified

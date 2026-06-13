@@ -1,0 +1,8 @@
+# Normalize line endings to LF in the repository; checkout as-is on all platforms
+* text=auto eol=lf
+
+# Binary files – no conversion
+*.whl   binary
+*.png   binary
+*.ico   binary
+*.woff2 binary

@@ -1,0 +1,8 @@
+CREATE TABLE dbo.orders (
+    "order_id" BIGINT IDENTITY(1,1) NOT NULL,
+    "customer_id" INTEGER NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "status" VARCHAR(MAX) DEFAULT 'pending',
+    "created_at" TIMESTAMP NOT NULL,
+    PRIMARY KEY ("order_id")
+);

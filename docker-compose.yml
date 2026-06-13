@@ -1,0 +1,43 @@
+# Universal SQL Transpiler — Docker Compose
+#
+# Services:
+#   backend   — FastAPI on port 8000 (also accessible at http://localhost:8000/api/docs)
+#   frontend  — nginx on port 80, proxies /api/* to the backend
+#
+# Usage:
+#   docker compose up --build        # first run
+#   docker compose up -d             # detached
+#   docker compose down              # stop + remove containers
+#
+# Official Docker Compose docs: https://docs.docker.com/compose/
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ust-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ust-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
