@@ -218,6 +218,8 @@ class LimitationItem(BaseModel):
     level: str          # "info" | "warn" | "error"
     description: str
     doc_url: str = ""
+    sql_keywords: List[str] = Field(default_factory=list)
+    """Frontend uses this to hide the limitation when none of the keywords appear in source SQL."""
 
 
 class DialectLimitations(BaseModel):

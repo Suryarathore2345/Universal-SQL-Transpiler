@@ -7,4 +7,4 @@ CREATE TABLE `analytics`.`orders` (
     PRIMARY KEY (`order_id`)
 )
 USING DELTA
-CLUSTER BY (`CREATED_AT`);
+CLUSTER BY (`created_at`);

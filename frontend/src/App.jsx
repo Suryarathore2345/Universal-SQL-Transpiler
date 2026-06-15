@@ -51,13 +51,14 @@ export default function App() {
       .catch(err => setError(`Could not load dialects: ${err.message}`))
   }, [])
 
-  // Reload limitations whenever target dialect changes
+  // Reload limitations whenever source OR target dialect changes.
+  // Pass source so backend filters applicable_sources server-side.
   useEffect(() => {
     if (!targetDialect) return
-    fetchLimitations(targetDialect)
+    fetchLimitations(targetDialect, sourceDialect)
       .then(dl => setLimitations(dl[0]?.limitations ?? []))
       .catch(() => setLimitations([]))
-  }, [targetDialect])
+  }, [targetDialect, sourceDialect])
 
   // When source dialect changes, update sample SQL to match that dialect's syntax
   const handleSourceChange = useCallback((newKey) => {
@@ -304,6 +305,7 @@ export default function App() {
           <LimitationsPanel
             limitations={limitations}
             dialectName={tgtDialect?.short_name ?? targetDialect}
+            sourceSql={sourceSql}
           />
         </div>
       </main>

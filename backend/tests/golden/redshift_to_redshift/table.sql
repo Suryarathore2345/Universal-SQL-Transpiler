@@ -8,4 +8,4 @@ CREATE TABLE analytics.orders (
 )
 DISTSTYLE KEY
 DISTKEY ("CREATED_AT")
-SORTKEY ("CREATED_AT");
+SORTKEY ("created_at");

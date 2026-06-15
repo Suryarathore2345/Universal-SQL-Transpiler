@@ -204,12 +204,17 @@ async def list_dialects() -> DialectsResponse:
     description=(
         "Returns the static limitations registry for all target dialects "
         "(or a single dialect if the `dialect` query parameter is supplied). "
-        "Each entry describes a known constraint that applies when generating "
-        "SQL for that platform."
+        "Pass `source` to filter out limitations that only apply to specific "
+        "source dialects (e.g. DISTKEY_REMOVED is irrelevant when source is "
+        "not Redshift). The `sql_keywords` field in each entry lets the "
+        "frontend hide entries whose keywords are absent from the source SQL."
     ),
 )
-async def list_limitations(dialect: str | None = None) -> LimitationsResponse:
-    raw = get_limitations(dialect)
+async def list_limitations(
+    dialect: str | None = None,
+    source:  str | None = None,
+) -> LimitationsResponse:
+    raw = get_limitations(dialect, source)
     result = [
         DialectLimitations(
             dialect=d,
@@ -219,6 +224,7 @@ async def list_limitations(dialect: str | None = None) -> LimitationsResponse:
                     level=lim["level"],
                     description=lim["description"],
                     doc_url=lim.get("doc_url", ""),
+                    sql_keywords=lim.get("sql_keywords") or [],
                 )
                 for lim in lims
             ],

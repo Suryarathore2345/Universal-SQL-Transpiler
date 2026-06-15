@@ -6,4 +6,4 @@ CREATE TABLE `analytics`.`orders` (
   `created_at` DATETIME NOT NULL,
   PRIMARY KEY (`order_id`) NOT ENFORCED
 )
-CLUSTER BY `CREATED_AT`;
+CLUSTER BY `created_at`;

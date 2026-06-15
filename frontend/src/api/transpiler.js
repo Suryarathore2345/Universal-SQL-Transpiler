@@ -18,11 +18,17 @@ export async function fetchDialects() {
 
 /**
  * Fetch known limitations for a target dialect (or all dialects if omitted).
- * @param {string} [dialect]
+ * Pass `source` to filter out limitations irrelevant to the current source dialect.
+ * @param {string} [dialect]  target dialect key
+ * @param {string} [source]   source dialect key (optional filter)
  * @returns {Promise<Array>} Array of DialectLimitations objects
  */
-export async function fetchLimitations(dialect) {
-  const url = dialect ? `${BASE}/limitations?dialect=${dialect}` : `${BASE}/limitations`
+export async function fetchLimitations(dialect, source) {
+  const params = new URLSearchParams()
+  if (dialect) params.set('dialect', dialect)
+  if (source)  params.set('source',  source)
+  const qs  = params.toString()
+  const url = qs ? `${BASE}/limitations?${qs}` : `${BASE}/limitations`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to load limitations: ${res.status}`)
   const data = await res.json()

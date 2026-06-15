@@ -6,4 +6,4 @@ CREATE TABLE analytics.orders (
     "created_at" TIMESTAMP_NTZ NOT NULL,
     PRIMARY KEY ("order_id")
 )
-CLUSTER BY ("CREATED_AT");
+CLUSTER BY ("created_at");

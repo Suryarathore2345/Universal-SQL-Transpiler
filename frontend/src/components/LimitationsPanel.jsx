@@ -1,8 +1,15 @@
 /**
  * LimitationsPanel — shows known transpilation limitations for the selected
- * target dialect.  Collapsible, same visual style as WarningsPanel.
+ * target dialect, filtered to only what's relevant to the current source SQL.
+ *
+ * Two-level filtering:
+ *  1. Backend already removed entries irrelevant to the source *dialect*
+ *     (e.g. DISTKEY_REMOVED is gone when source ≠ Redshift).
+ *  2. Here we additionally hide entries whose sql_keywords are present in the
+ *     registry but NOT in the user's actual source SQL
+ *     (e.g. PROCEDURE_BODY_MANUAL only shows when SQL contains "PROCEDURE").
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 const LEVEL_COLOR = {
   error: 'var(--accent-red)',
@@ -16,19 +23,38 @@ const LEVEL_LABEL = {
   info:  'INFO',
 }
 
-export default function LimitationsPanel({ limitations = [], dialectName = '' }) {
+/**
+ * Given a limitation entry and the uppercased source SQL, decide whether to show it.
+ * Rule: if sql_keywords is non-empty, at least one keyword must appear in the SQL.
+ *       If sql_keywords is empty / absent, always show (backend already filtered by source dialect).
+ */
+function isRelevant(lim, sqlUpper) {
+  if (!lim.sql_keywords || lim.sql_keywords.length === 0) return true
+  return lim.sql_keywords.some(kw => sqlUpper.includes(kw.toUpperCase()))
+}
+
+export default function LimitationsPanel({ limitations = [], dialectName = '', sourceSql = '' }) {
   const [open, setOpen] = useState(false)
 
-  if (limitations.length === 0) return null
+  // Compute once per SQL change — uppercased for case-insensitive keyword matching
+  const sqlUpper = useMemo(() => sourceSql.toUpperCase(), [sourceSql])
 
-  const errorCount = limitations.filter(l => l.level === 'error').length
-  const warnCount  = limitations.filter(l => l.level === 'warn').length
+  // Filter to only relevant limitations
+  const visible = useMemo(
+    () => limitations.filter(lim => isRelevant(lim, sqlUpper)),
+    [limitations, sqlUpper],
+  )
+
+  if (visible.length === 0) return null
+
+  const errorCount = visible.filter(l => l.level === 'error').length
+  const warnCount  = visible.filter(l => l.level === 'warn').length
 
   const badge = errorCount > 0
     ? { color: LEVEL_COLOR.error, text: `${errorCount} error${errorCount > 1 ? 's' : ''}` }
     : warnCount > 0
       ? { color: LEVEL_COLOR.warn,  text: `${warnCount} warn${warnCount > 1 ? 's' : ''}` }
-      : { color: LEVEL_COLOR.info,  text: `${limitations.length} notes` }
+      : { color: LEVEL_COLOR.info,  text: `${visible.length} notes` }
 
   return (
     <div className="lim-panel">
@@ -49,7 +75,7 @@ export default function LimitationsPanel({ limitations = [], dialectName = '' })
 
       {open && (
         <ul className="lim-list">
-          {limitations.map(lim => (
+          {visible.map(lim => (
             <li key={lim.feature} className="lim-item">
               <span
                 className="lim-badge"
