@@ -5,12 +5,21 @@ Official docs used:
   CREATE TABLE:     https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-azure-sql-data-warehouse?view=fabric
   T-SQL surface:    https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
   Data types:       https://learn.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql
+  Constraints:      https://learn.microsoft.com/en-us/fabric/data-warehouse/table-constraints
 
-Fabric DW NOT supported (verified June 2026):
+Fabric DW NOT supported (verified June 2026 against T-SQL surface area page):
   - Materialized views
   - DISTRIBUTION clause (no Synapse-style HASH/ROUND_ROBIN/REPLICATE)
+  - DEFAULT constraints on columns (not in Fabric DW T-SQL surface area)
+  - CHECK constraints
+  - Computed/generated columns
   - tinyint, money, datetime, datetimeoffset, nchar, nvarchar, text, image, xml, geography, geometry
-  - Triggers, recursive CTEs
+  - Triggers, recursive CTEs, sequences
+
+NOT ENFORCED (defined but not validated at runtime):
+  - PRIMARY KEY, UNIQUE, FOREIGN KEY
+
+Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
 """
 from __future__ import annotations
 
@@ -179,8 +188,31 @@ class FabricDWGenerator(DialectGenerator):
         if not col.is_nullable:
             parts.append("NOT NULL")
 
+        # Fabric DW does NOT support DEFAULT constraints.
+        # Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
+        # Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/table-constraints
+        # The DEFAULT value is dropped and a warning is emitted.
         if col.default_value is not None:
-            parts.append(f"DEFAULT {col.default_value}")
+            warnings.append(IRWarning(
+                feature="DEFAULT_NOT_SUPPORTED_FABRIC_DW",
+                message=(
+                    f"Column '{col.name}': DEFAULT {col.default_value!r} is NOT supported "
+                    f"in Microsoft Fabric Data Warehouse. "
+                    f"DEFAULT constraints are not part of the Fabric DW T-SQL surface area. "
+                    f"The DEFAULT value has been removed. "
+                    f"Apply default logic in your application, ELT pipeline, or a Fabric Notebook."
+                ),
+                doc_url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area",
+                severity=Warningseverity.WARNING,
+                fallback_applied=False,
+            ))
+            doc_refs.append(IRDocReference(
+                title="Fabric DW T-SQL Surface Area — unsupported constraints",
+                url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area",
+                platform="fabric_dw",
+                purpose="DEFAULT constraint is not supported in Fabric DW",
+            ))
+            # DEFAULT is intentionally NOT added to parts — Fabric DW rejects it
 
         return " ".join(parts), warnings, doc_refs
 

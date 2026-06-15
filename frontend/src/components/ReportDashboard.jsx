@@ -19,12 +19,16 @@ import { useEffect, useRef, useState } from 'react'
 // ── Confidence gauge ───────────────────────────────────────────────────────
 
 function ConfidenceGauge({ score, level }) {
-  const r = 64
+  // Semicircle arc:  M (cx-r, cy) A r r 0 0 1 (cx+r, cy)
+  // sweep=1 → clockwise → arc curves ABOVE cy (through apex at cy-r)
+  // Parametric point at fraction t:  angle = π*(1-t) from the positive x-axis
+  //   x = cx + r·cos(π(1-t))
+  //   y = cy - r·sin(π(1-t))   (subtract because SVG y increases downward)
+  const r  = 56
   const cx = 80
-  const cy = 80
-  const strokeW = 12
-  const circumference = Math.PI * r          // half circle
-  const filled = circumference * score
+  const cy = 78   // pushed up so score text clears the arc bottom
+  const strokeW  = 10
+  const circumference = Math.PI * r
 
   const COLOR = {
     HIGH:          '#34d399',
@@ -49,21 +53,30 @@ function ConfidenceGauge({ score, level }) {
   }, [score])
 
   const animFilled = circumference * animScore
-  const dashArr = `${animFilled} ${circumference}`
-  const pct = Math.round(animScore * 100)
+  const dashArr    = `${animFilled} ${circumference}`
+  const pct        = Math.round(animScore * 100)
+
+  // Glow-dot position follows the arc exactly
+  const dotAngle = Math.PI * (1 - animScore)   // π at score=0 → 0 at score=1
+  const dotX = cx + r * Math.cos(dotAngle)
+  const dotY = cy - r * Math.sin(dotAngle)
+
+  // Track goes full 180°; background track uses full circumference
+  const trackArr = `${circumference} ${circumference}`
 
   return (
     <div className="rpt-gauge-wrap">
-      <svg viewBox="0 0 160 100" className="rpt-gauge-svg">
-        {/* Track */}
+      <svg viewBox="0 0 160 110" className="rpt-gauge-svg">
+        {/* Background track */}
         <path
           d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none"
-          stroke="var(--bg-elevated)"
+          stroke="var(--bg-base)"
           strokeWidth={strokeW}
           strokeLinecap="round"
+          strokeDasharray={trackArr}
         />
-        {/* Fill */}
+        {/* Coloured fill */}
         <path
           d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none"
@@ -71,23 +84,30 @@ function ConfidenceGauge({ score, level }) {
           strokeWidth={strokeW}
           strokeLinecap="round"
           strokeDasharray={dashArr}
-          style={{ filter: `drop-shadow(0 0 6px ${color})` }}
+          style={{ filter: `drop-shadow(0 0 5px ${color}88)` }}
         />
-        {/* Glow dot at tip */}
-        <circle
-          cx={cx - r + animFilled}
-          cy={cy}
-          r={strokeW / 2 + 2}
-          fill={color}
-          style={{ filter: `drop-shadow(0 0 8px ${color})`, opacity: 0.85 }}
-        />
-        {/* Score text */}
-        <text x={cx} y={cy - 8} textAnchor="middle" className="gauge-pct-text">
+        {/* Glow dot — follows arc path correctly */}
+        {animScore > 0.01 && (
+          <circle
+            cx={dotX}
+            cy={dotY}
+            r={strokeW / 2 + 1}
+            fill={color}
+            style={{ filter: `drop-shadow(0 0 7px ${color})`, opacity: 0.9 }}
+          />
+        )}
+        {/* Score % — centred in the arc */}
+        <text x={cx} y={cy + 4} textAnchor="middle" className="gauge-pct-text">
           {pct}%
         </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" className="gauge-level-text"
-          style={{ fill: color }}>
-          {level.replace('_', ' ')}
+        {/* Level label — below the arc baseline, never overlaps */}
+        <text
+          x={cx} y={cy + 22}
+          textAnchor="middle"
+          className="gauge-level-text"
+          style={{ fill: color }}
+        >
+          {level.replace(/_/g, ' ')}
         </text>
       </svg>
     </div>

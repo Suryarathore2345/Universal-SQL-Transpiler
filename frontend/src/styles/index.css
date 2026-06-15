@@ -653,6 +653,36 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 /* =============================================================
+   Phase 8 — Confidence bar (below editors row)
+   ============================================================= */
+
+.confidence-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 8px;
+  animation: fadeIn 300ms ease;
+}
+.confidence-bar-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  flex-shrink: 0;
+}
+.confidence-bar-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  opacity: .7;
+}
+
+/* =============================================================
    Phase 8 — Confidence Badge
    ============================================================= */
 
@@ -660,7 +690,7 @@ button { cursor: pointer; font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: var(--radius-xl);
   border: 1px solid transparent;
   font-size: 11px;
@@ -668,8 +698,8 @@ button { cursor: pointer; font-family: inherit; }
   letter-spacing: .04em;
   cursor: pointer;
   transition: transform var(--transition), box-shadow var(--transition);
-  margin-top: 10px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .confidence-badge:hover {
   transform: scale(1.04);

@@ -217,7 +217,7 @@ export default function App() {
             />
           </div>
 
-          {/* Divider + Transpile button + Confidence badge */}
+          {/* Divider + Transpile button */}
           <div className="center-col">
             <button
               className={`btn-transpile ${loading ? 'btn-transpile--loading' : ''}`}
@@ -234,13 +234,6 @@ export default function App() {
                 </>
               )}
             </button>
-            {confidenceScore !== null && !loading && (
-              <ConfidenceBadge
-                score={confidenceScore}
-                level={confidenceLevel}
-                onClick={() => setShowReport(true)}
-              />
-            )}
           </div>
 
           {/* Target */}
@@ -264,6 +257,19 @@ export default function App() {
             />
           </div>
         </div>
+
+        {/* ── Confidence bar (appears after first transpile) ── */}
+        {confidenceScore !== null && !loading && (
+          <div className="confidence-bar">
+            <span className="confidence-bar-label">Conversion quality</span>
+            <ConfidenceBadge
+              score={confidenceScore}
+              level={confidenceLevel}
+              onClick={() => setShowReport(true)}
+            />
+            <span className="confidence-bar-hint">Click the badge to open the full report</span>
+          </div>
+        )}
 
         {/* ── Error banner ── */}
         {error && (

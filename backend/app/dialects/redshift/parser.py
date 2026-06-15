@@ -311,9 +311,10 @@ class RedshiftParser(DialectParser):
     ) -> Tuple[Optional[IRSortKey], List[IRWarning], List[IRDocReference]]:
         """
         Extract SORTKEY / INTERLEAVED SORTKEY from Redshift DDL.
+        Column names are preserved in their original case (not uppercased).
+
         Redshift docs: https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
         """
-        sql_u = sql.upper()
         doc_refs = [IRDocReference(
             title="Redshift SORTKEY",
             url="https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html",
@@ -321,16 +322,20 @@ class RedshiftParser(DialectParser):
             purpose="Sort key extraction",
         )]
 
-        interleaved = "INTERLEAVED" in sql_u
+        # Detect INTERLEAVED from original SQL (case-insensitive check)
+        interleaved = bool(re.search(r'\bINTERLEAVED\b', sql, re.IGNORECASE))
         sort_type = SortKeyType.INTERLEAVED if interleaved else SortKeyType.COMPOUND
 
-        m = re.search(r"(?:INTERLEAVED\s+)?SORTKEY\s*\(([^)]+)\)", sql_u)
+        # Match compound/table-level SORTKEY (col1, col2, ...) — use original case
+        m = re.search(r"(?:INTERLEAVED\s+)?SORTKEY\s*\(([^)]+)\)", sql, re.IGNORECASE)
         if m:
+            # Preserve original column name casing from source SQL
             cols = [c.strip() for c in m.group(1).split(",")]
             return IRSortKey(sort_type=sort_type, columns=cols), [], doc_refs
 
-        # Column-level SORTKEY
-        m2 = re.search(r"(\w+)\s+\w[\w\s(),]*\bSORTKEY\b", sql_u)
+        # Column-level SORTKEY: "col_name <type> ... SORTKEY"
+        # Match the column name before its type definition (not uppercased)
+        m2 = re.search(r"^\s*(\w+)\s+\w[\w\s(),]*\bSORTKEY\b", sql, re.IGNORECASE | re.MULTILINE)
         if m2:
             return IRSortKey(sort_type=sort_type, columns=[m2.group(1)]), [], doc_refs
 
