@@ -22,26 +22,13 @@ import LimitationsPanel from './components/LimitationsPanel.jsx'
 import ConfidenceBadge from './components/ConfidenceBadge.jsx'
 import ReportDashboard from './components/ReportDashboard.jsx'
 import { fetchDialects, fetchLimitations, transpile } from './api/transpiler.js'
-
-const DEFAULT_SQL = `-- Paste your SQL DDL here
-CREATE TABLE public.orders (
-    order_id    BIGINT          NOT NULL,
-    customer_id INTEGER         NOT NULL,
-    amount      DECIMAL(18, 2)  NOT NULL,
-    status      VARCHAR(32)     DEFAULT 'pending',
-    created_at  TIMESTAMP       NOT NULL,
-    PRIMARY KEY (order_id)
-)
-DISTSTYLE KEY
-DISTKEY (customer_id)
-SORTKEY (created_at);
-`
+import { DIALECT_COLORS, DIALECT_SAMPLES } from './data/dialectMeta.js'
 
 export default function App() {
   const [dialects, setDialects]       = useState([])
   const [sourceDialect, setSrc]       = useState('redshift')
   const [targetDialect, setTgt]       = useState('snowflake')
-  const [sourceSql, setSourceSql]     = useState(DEFAULT_SQL)
+  const [sourceSql, setSourceSql]     = useState(DIALECT_SAMPLES['redshift'] ?? '')
   const [targetSql, setTargetSql]     = useState('')
   const [warnings, setWarnings]       = useState([])
   const [unsupported, setUnsupported] = useState([])
@@ -72,15 +59,35 @@ export default function App() {
       .catch(() => setLimitations([]))
   }, [targetDialect])
 
+  // When source dialect changes, update sample SQL to match that dialect's syntax
+  const handleSourceChange = useCallback((newKey) => {
+    setSrc(newKey)
+    setTargetSql('')
+    setError(null)
+    setConfidenceScore(null)
+    setConfidenceLevel(null)
+    setLastResult(null)
+    // Only replace if user hasn't modified the default (check against all samples)
+    const allSamples = Object.values(DIALECT_SAMPLES)
+    const isUsingDefault = allSamples.some(s => sourceSql.trim() === s.trim())
+    if (isUsingDefault) {
+      setSourceSql(DIALECT_SAMPLES[newKey] ?? '')
+    }
+  }, [sourceSql])
+
   const handleSwap = useCallback(() => {
     setSrc(targetDialect)
     setTgt(sourceDialect)
-    setSourceSql(targetSql || sourceSql)
+    const swappedSql = targetSql || DIALECT_SAMPLES[targetDialect] || sourceSql
+    setSourceSql(swappedSql)
     setTargetSql('')
     setWarnings([])
     setUnsupported([])
     setDocRefs([])
     setError(null)
+    setConfidenceScore(null)
+    setConfidenceLevel(null)
+    setLastResult(null)
   }, [sourceDialect, targetDialect, sourceSql, targetSql])
 
   const handleTranspile = useCallback(async () => {
@@ -137,8 +144,18 @@ export default function App() {
   const srcDialect = dialects.find(d => d.key === sourceDialect)
   const tgtDialect = dialects.find(d => d.key === targetDialect)
 
+  // Dynamic background: ambient glow from source (left) and target (right) brand colors
+  const srcColor = DIALECT_COLORS[sourceDialect]?.primary ?? '#7c3aed'
+  const tgtColor = DIALECT_COLORS[targetDialect]?.primary ?? '#2563eb'
+  const appStyle = {
+    '--src-color': srcColor,
+    '--tgt-color': tgtColor,
+    '--src-glow':  DIALECT_COLORS[sourceDialect]?.glow ?? 'rgba(124,58,237,0.1)',
+    '--tgt-glow':  DIALECT_COLORS[targetDialect]?.glow ?? 'rgba(37,99,235,0.1)',
+  }
+
   return (
-    <div className="app">
+    <div className="app" style={appStyle}>
       {/* ── Header ── */}
       <header className="app-header">
         <div className="header-inner">
@@ -172,7 +189,7 @@ export default function App() {
                 label="Source dialect"
                 value={sourceDialect}
                 dialects={dialects}
-                onChange={v => { setSrc(v); setTargetSql(''); setError(null) }}
+                onChange={handleSourceChange}
                 disabled={loading}
               />
 
@@ -191,7 +208,7 @@ export default function App() {
                 label="Target dialect"
                 value={targetDialect}
                 dialects={dialects}
-                onChange={v => { setTgt(v); setTargetSql(''); setError(null) }}
+                onChange={v => { setTgt(v); setTargetSql(''); setError(null); setConfidenceScore(null); setLastResult(null) }}
                 disabled={loading}
               />
             </>

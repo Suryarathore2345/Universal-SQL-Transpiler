@@ -65,6 +65,7 @@ button { cursor: pointer; font-family: inherit; }
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  /* Dynamic gradient set via --src-glow / --tgt-glow in App.jsx inline style */
 }
 
 /* ── Header ── */
@@ -145,52 +146,173 @@ button { cursor: pointer; font-family: inherit; }
   gap: 16px;
 }
 
+/* ── Dynamic background gradient — brand colors from source/target ── */
+.app {
+  background:
+    radial-gradient(ellipse 50% 70% at 5% 40%, var(--src-glow, rgba(124,58,237,0.10)) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 70% at 95% 40%, var(--tgt-glow, rgba(37,99,235,0.10)) 0%, transparent 65%),
+    var(--bg-base);
+  transition: background 800ms ease;
+}
+
 /* ── Dialect row ── */
 .dialect-row {
   display: flex;
   align-items: flex-end;
   gap: 12px;
 }
-.dialect-selector {
+
+/* ── New DialectSelector (card-based picker) ── */
+.ds-wrap {
   flex: 1;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.dialect-label {
+.ds-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: .06em;
   color: var(--text-muted);
+  margin: 0;
 }
-.dialect-select-wrap {
-  position: relative;
-}
-.dialect-select {
-  width: 100%;
+
+/* ── Trigger button ── */
+.ds-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  color: var(--text-primary);
-  padding: 9px 36px 9px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  appearance: none;
-  -webkit-appearance: none;
+  padding: 8px 12px;
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
+  width: 100%;
+  text-align: left;
+  transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+  position: relative;
+  color: var(--text-primary);
+  min-height: 52px;
 }
-.dialect-select:focus {
-  outline: none;
-  border-color: var(--accent-purple);
-  box-shadow: 0 0 0 3px rgba(124,58,237,.2);
+.ds-trigger:hover:not(:disabled) {
+  border-color: var(--brand, var(--accent-purple));
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--brand, var(--accent-purple)), 0 0 16px -4px var(--brand, var(--accent-purple));
 }
-.dialect-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.dialect-select option { background: var(--bg-elevated); }
+.ds-trigger--open {
+  border-color: var(--brand, var(--accent-purple)) !important;
+  box-shadow: 0 0 0 2px var(--brand, var(--accent-purple))33, 0 0 20px -4px var(--brand, var(--accent-purple)) !important;
+  background: var(--bg-elevated) !important;
+}
+.ds-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ds-trigger-logo { display: flex; align-items: center; flex-shrink: 0; }
+.ds-trigger-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ds-trigger-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-trigger-vendor {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-chevron {
+  color: var(--text-muted);
+  transition: transform 200ms ease, color 200ms ease;
+  flex-shrink: 0;
+}
+.ds-chevron--up { transform: rotate(180deg); color: var(--brand, var(--accent-purple)); }
+
+/* ── Dropdown ── */
+.ds-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  animation: dropIn 150ms cubic-bezier(.17,.67,.32,1.2);
+}
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Cards grid ── */
+.ds-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.ds-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 6px 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 100ms ease;
+}
+.ds-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--card-brand, var(--border));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--card-brand, #7c3aed) 30%, transparent);
+}
+.ds-card--active {
+  background: color-mix(in srgb, var(--card-brand, #7c3aed) 10%, var(--bg-base));
+  border-color: var(--card-brand, var(--accent-purple));
+  box-shadow: 0 0 0 1px var(--card-brand, var(--accent-purple)), 0 4px 16px -4px var(--card-brand, var(--accent-purple));
+}
+.ds-card-logo { display: flex; align-items: center; justify-content: center; }
+.ds-card-name {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ds-card--active .ds-card-name { color: var(--text-primary); }
+.ds-card-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  background: var(--card-brand, var(--accent-purple));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
 
 .swap-col {
   display: flex;
