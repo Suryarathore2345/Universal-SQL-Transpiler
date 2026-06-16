@@ -579,12 +579,11 @@ generic_types:
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/bit-transact-sql"
         confidence: verified
       oracle:
-        type: "BOOLEAN"
-        aliases: ["BOOL"]
-        notes: "Oracle BOOLEAN native support added in Oracle 21c. For older versions use NUMBER(1) CHECK (col IN (0,1))."
+        type: "NUMBER(1)"
+        aliases: ["BOOL", "BOOLEAN"]
+        notes: "Oracle 21c and earlier have no native BOOLEAN type. NUMBER(1) with CHECK (col IN (0,1)) is the standard workaround. Oracle 23c adds native BOOLEAN but enterprise deployments are still predominantly on 12c-19c."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
-        oracle_legacy_fallback: "NUMBER(1)"
 
   # ── Date & Time ───────────────────────────────────────────────────────────
 

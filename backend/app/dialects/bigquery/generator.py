@@ -211,7 +211,12 @@ class BigQueryGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="BigQuery CREATE VIEW", url="https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_view_statement", platform="bigquery", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{view.definition};", [], doc_refs
+        defn = view.definition
+        defn = self._convert_nvl2_to_case(defn)         # NVL2 → CASE WHEN
+        defn = self._convert_nvl_to_ifnull(defn)        # NVL → IFNULL
+        defn = self._convert_isnull_to_ifnull(defn)     # ISNULL → IFNULL
+        defn = self._convert_decode_to_case(defn)        # DECODE → CASE
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW

@@ -192,7 +192,12 @@ class SynapseGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Synapse CREATE VIEW", url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql", platform="synapse", purpose="View generation")]
         or_replace = "OR ALTER " if view.or_replace else ""
         qname = self._qualified_name(view)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{view.definition};", [], doc_refs
+        defn = view.definition
+        defn = self._convert_backtick_identifiers(defn)
+        defn = self._convert_nvl2_to_case(defn)
+        defn = self._convert_nvl_aware(defn)        # NVL → ISNULL
+        defn = self._convert_decode_to_case(defn)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW

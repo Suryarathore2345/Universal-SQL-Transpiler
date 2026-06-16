@@ -294,7 +294,11 @@ class SnowflakeGenerator(DialectGenerator):
         or_replace = "OR REPLACE " if view.or_replace else ""
         secure = "SECURE " if view.is_secure else ""
         qname = self._qualified_name(view)
-        sql = f"CREATE {or_replace}{secure}VIEW {qname} AS\n{view.definition};"
+        defn = view.definition
+        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
+        defn = self._convert_isnull_to_nvl(defn)          # ISNULL → NVL (Snowflake native)
+        # NVL, NVL2, DECODE are all native to Snowflake — no conversion needed
+        sql = f"CREATE {or_replace}{secure}VIEW {qname} AS\n{defn};"
         return sql, [], doc_refs
 
     # -------------------------------------------------------------------------

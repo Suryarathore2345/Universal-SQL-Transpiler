@@ -185,7 +185,12 @@ class DatabricksGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Databricks CREATE VIEW", url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-view.html", platform="databricks", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{view.definition};", [], doc_refs
+        defn = view.definition
+        defn = self._convert_backtick_identifiers(defn)
+        defn = self._convert_nvl2_to_case(defn)          # NVL2 → CASE WHEN
+        defn = self._convert_isnull_to_ifnull(defn)      # ISNULL → IFNULL
+        defn = self._convert_decode_to_case(defn)         # DECODE → CASE
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW

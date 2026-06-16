@@ -102,7 +102,12 @@ class SQLServerParser(DialectParser):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
                 elif isinstance(expr, exp.ForeignKey):
                     ref = expr.args.get("reference")
-                    fks.append(IRForeignKey(columns=[c.name for c in expr.expressions], ref_table=ref.this.name if ref and ref.this else "unknown", ref_schema=(ref.this.db if ref and ref.this else None) or None, ref_columns=[c.name for c in ref.expressions] if ref else []))
+                    fks.append(IRForeignKey(
+                        columns=[c.name for c in expr.expressions],
+                        ref_table=getattr(ref.this, "name", None) or "unknown" if ref and ref.this else "unknown",
+                        ref_schema=getattr(ref.this, "db", None) if ref and ref.this else None,
+                        ref_columns=[c.name for c in ref.expressions] if ref else [],
+                    ))
                 elif isinstance(expr, exp.UniqueColumnConstraint):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
 

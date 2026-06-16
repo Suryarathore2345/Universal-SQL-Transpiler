@@ -249,7 +249,7 @@ class SnowflakeParser(DialectParser):
         cols = [c.name for c in fk_node.expressions]
         ref = fk_node.args.get("reference")
         ref_table = ref.this.name if ref and ref.this else "unknown"
-        ref_schema = ref.this.db if ref and ref.this else None
+        ref_schema = getattr(ref.this, 'db', None) if ref and ref.this else None
         ref_cols = [c.name for c in ref.expressions] if ref else []
         return IRForeignKey(
             columns=cols,

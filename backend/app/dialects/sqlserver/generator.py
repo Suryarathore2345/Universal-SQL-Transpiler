@@ -232,7 +232,13 @@ class SQLServerGenerator(DialectGenerator):
         )]
         or_replace = "OR ALTER " if view.or_replace else ""
         qname = self._qualified_name(view)
-        sql = f"CREATE {or_replace}VIEW {qname} AS\n{view.definition};"
+        # Convert Oracle/BigQuery source-dialect functions to T-SQL equivalents
+        defn = view.definition
+        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
+        defn = self._convert_nvl2_to_case(defn)           # NVL2 → CASE WHEN
+        defn = self._convert_nvl_aware(defn)               # NVL → ISNULL
+        defn = self._convert_decode_to_case(defn)          # DECODE → CASE
+        sql = f"CREATE {or_replace}VIEW {qname} AS\n{defn};"
         return sql, [], doc_refs
 
     # -------------------------------------------------------------------------

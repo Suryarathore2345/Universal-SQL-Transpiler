@@ -246,13 +246,23 @@ class RedshiftParser(DialectParser):
     def _parse_fk(self, fk_node: exp.ForeignKey) -> IRForeignKey:
         cols = [c.name for c in fk_node.expressions]
         ref = fk_node.args.get("reference")
-        ref_table = ref.this.name if ref and ref.this else "unknown"
-        ref_schema = ref.this.db if ref and ref.this else None
+        ref_this = ref.this if ref else None
+
+        # ref.this can be a Table, Schema, or Column node depending on how
+        # sqlglot parses the reference.  Use .name for the table name and
+        # .db (only on Table) for the schema — guard against missing attrs.
+        if ref_this is not None:
+            ref_table = getattr(ref_this, "name", None) or "unknown"
+            ref_schema = getattr(ref_this, "db", None) or None
+        else:
+            ref_table = "unknown"
+            ref_schema = None
+
         ref_cols = [c.name for c in ref.expressions] if ref else []
         return IRForeignKey(
             columns=cols,
             ref_table=ref_table,
-            ref_schema=ref_schema or None,
+            ref_schema=ref_schema,
             ref_columns=ref_cols,
             not_enforced=True,  # Redshift FK constraints are not enforced
         )

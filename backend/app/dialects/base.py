@@ -719,3 +719,61 @@ class DialectGenerator(ABC):
         if current:
             parts.append("".join(current))
         return parts
+
+    # -----------------------------------------------------------------------
+    # View definition body transformation utilities
+    # Applied in generate_view() to convert source-dialect functions to the
+    # target dialect equivalents before emitting the view body.
+    # -----------------------------------------------------------------------
+
+    def _convert_nvl2_to_case(self, sql: str) -> str:
+        """
+        Convert NVL2(expr, val_if_not_null, val_if_null)
+        →  CASE WHEN expr IS NOT NULL THEN val_if_not_null ELSE val_if_null END
+        For dialects that don't support NVL2 (everything except Oracle/Snowflake).
+        """
+        pattern = re.compile(r'\bNVL2\s*\(', re.IGNORECASE)
+        result = []
+        last = 0
+        for m in pattern.finditer(sql):
+            args_str = self._extract_func_args_str(sql, "NVL2", m.start())
+            if args_str is None:
+                result.append(sql[last:m.end()])
+                last = m.end()
+                continue
+            args = self._split_top_level(args_str)
+            if len(args) != 3:
+                # Malformed NVL2 — leave as-is
+                result.append(sql[last:m.end()])
+                last = m.end()
+                continue
+            expr, val_nn, val_null = args[0].strip(), args[1].strip(), args[2].strip()
+            case_sql = f"CASE WHEN {expr} IS NOT NULL THEN {val_nn} ELSE {val_null} END"
+            result.append(sql[last:m.start()])
+            result.append(case_sql)
+            last = m.start() + len(m.group()) + len(args_str) + 1  # skip closing )
+        result.append(sql[last:])
+        return "".join(result)
+
+    def _convert_isnull_to_nvl(self, sql: str) -> str:
+        """Convert T-SQL ISNULL(a, b) → Oracle-style NVL(a, b)."""
+        return re.sub(r'\bISNULL\s*\(', 'NVL(', sql, flags=re.IGNORECASE)
+
+    def _convert_isnull_to_ifnull(self, sql: str) -> str:
+        """Convert T-SQL ISNULL(a, b) → IFNULL(a, b) (BigQuery/Databricks/MySQL style)."""
+        return re.sub(r'\bISNULL\s*\(', 'IFNULL(', sql, flags=re.IGNORECASE)
+
+    def _convert_nvl_to_ifnull(self, sql: str) -> str:
+        """Convert Oracle/Redshift NVL(a, b) → IFNULL(a, b) (BigQuery/Databricks style).
+        Uses negative lookahead to avoid matching NVL2."""
+        return re.sub(r'\bNVL(?!2)\s*\(', 'IFNULL(', sql, flags=re.IGNORECASE)
+
+    @staticmethod
+    def _convert_backtick_identifiers(sql: str) -> str:
+        """
+        Convert BigQuery-style backtick identifiers to double-quoted identifiers.
+        `myproject.dataset.table`  →  "myproject.dataset.table"
+        Applied in non-BigQuery generators so view definitions don't leak
+        BigQuery identifier quoting into other dialects.
+        """
+        return re.sub(r'`([^`]+)`', r'"\1"', sql)

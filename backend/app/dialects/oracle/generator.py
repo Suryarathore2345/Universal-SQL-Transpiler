@@ -149,11 +149,29 @@ class OracleGenerator(DialectGenerator):
     def _column_def(
         self, col: IRColumn
     ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        from app.ir.models import GenericType
         warnings: List[IRWarning] = []
         doc_refs: List[IRDocReference] = []
 
         type_str, w, d = self._type_to_sql(col.data_type)
         warnings.extend(w); doc_refs.extend(d)
+
+        # Detect BOOLEAN → NUMBER(1) conversion so we can add a CHECK constraint
+        # and emit the appropriate warning.
+        # Docs: https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html
+        is_boolean_col = col.data_type.generic_type == GenericType.BOOLEAN
+        if is_boolean_col:
+            # type_str is already NUMBER(1) via type_mappings.yaml
+            warnings.append(IRWarning(
+                feature="NO_BOOLEAN",
+                message=(
+                    f"Column '{col.name}': Oracle 21c and earlier have no BOOLEAN type. "
+                    f"Converted to NUMBER(1) CHECK ({col.name} IN (0,1)). "
+                    f"Oracle 23c adds native BOOLEAN but most deployments are on 12c–19c."
+                ),
+                doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html",
+                severity=Warningseverity.WARNING,
+            ))
 
         parts = [self._quote_identifier(col.name), type_str]
 
@@ -174,7 +192,18 @@ class OracleGenerator(DialectGenerator):
             parts.append("NOT NULL")
 
         if col.default_value is not None:
-            parts.append(f"DEFAULT {col.default_value}")
+            # Translate boolean default values to 0/1 for NUMBER(1)
+            if is_boolean_col:
+                dv = str(col.default_value).upper().strip()
+                mapped_dv = "1" if dv in ("TRUE", "1", "YES") else "0"
+                parts.append(f"DEFAULT {mapped_dv}")
+            else:
+                parts.append(f"DEFAULT {col.default_value}")
+
+        # Add CHECK constraint for BOOLEAN → NUMBER(1) columns
+        if is_boolean_col:
+            col_q = self._quote_identifier(col.name)
+            parts.append(f"CHECK ({col_q} IN (0, 1))")
 
         return " ".join(parts), warnings, doc_refs
 
@@ -207,7 +236,11 @@ class OracleGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Oracle CREATE VIEW", url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-VIEW.html", platform="oracle", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{view.definition};", [], doc_refs
+        defn = view.definition
+        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
+        defn = self._convert_isnull_to_nvl(defn)          # ISNULL → NVL (Oracle native)
+        # NVL, NVL2, DECODE are all native to Oracle — no conversion needed
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW

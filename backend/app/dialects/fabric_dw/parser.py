@@ -121,7 +121,13 @@ class FabricDWParser(DialectParser):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
                 elif isinstance(expr, exp.ForeignKey):
                     ref = expr.args.get("reference")
-                    fks.append(IRForeignKey(columns=[c.name for c in expr.expressions], ref_table=ref.this.name if ref and ref.this else "unknown", ref_schema=(ref.this.db if ref and ref.this else None) or None, ref_columns=[c.name for c in ref.expressions] if ref else []))
+                    ref_this = ref.this if ref else None
+                    fks.append(IRForeignKey(
+                        columns=[c.name for c in expr.expressions],
+                        ref_table=getattr(ref_this, "name", None) or "unknown" if ref_this else "unknown",
+                        ref_schema=getattr(ref_this, "db", None) if ref_this else None,
+                        ref_columns=[c.name for c in ref.expressions] if ref else [],
+                    ))
                 elif isinstance(expr, exp.UniqueColumnConstraint):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
 

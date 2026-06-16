@@ -212,7 +212,9 @@ class Transpiler:
 
         # 1. Residual validator — scan output for leftover source-dialect syntax
         existing_codes = {w.feature for w in clean_warnings} | {w.feature for w in unsupported}
-        residual_warnings = validate_residuals(combined_sql, src.value, existing_codes)
+        residual_warnings = validate_residuals(
+            combined_sql, src.value, existing_codes, target_dialect=tgt.value
+        )
 
         # 2. Confidence scoring
         confidence_score, confidence_level = compute_confidence(
