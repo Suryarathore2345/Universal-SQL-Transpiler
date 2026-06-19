@@ -39,6 +39,12 @@ class ObjectType(str, Enum):
     DATABASE = "database"
     SEQUENCE = "sequence"
     ALTER_TABLE = "alter_table"
+    # Query / DML types (routed through QueryTranspiler, not the DDL pipeline)
+    SELECT_QUERY = "select_query"
+    INSERT = "insert"
+    UPDATE = "update"
+    DELETE = "delete"
+    MERGE = "merge"
 
 
 class GenericType(str, Enum):

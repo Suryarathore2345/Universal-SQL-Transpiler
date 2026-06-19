@@ -17,6 +17,7 @@ from app.ir.models import (
     TranspileResult, Warningseverity,
 )
 from app.validator import validate_residuals, compute_confidence
+from app.query_transpiler import detect_statement_type, transpile_script, transpile_query, _split_statements
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +146,14 @@ class Transpiler:
                 )],
             )
 
+        # ------------------------------------------------------------------
+        # Query routing — SELECT / DML bypasses the DDL parser/generator pipeline
+        # ------------------------------------------------------------------
+        statements = _split_statements(sql)
+        non_empty = [s for s in statements if s.strip()]
+        if non_empty and all(detect_statement_type(s) is not None for s in non_empty):
+            return cls._convert_query(sql, src, tgt, t0)
+
         parsers = cls._get_parsers()
         generators = cls._get_generators()
 
@@ -252,6 +261,55 @@ class Transpiler:
             unsupported_features=unsupported,
             doc_references=deduped_refs,
             residual_warnings=residual_warnings,
+            confidence_score=confidence_score,
+            confidence_level=confidence_level,
+            elapsed_ms=elapsed_ms,
+        )
+
+    @classmethod
+    def _convert_query(
+        cls,
+        sql: str,
+        src: Dialect,
+        tgt: Dialect,
+        t0: float,
+    ) -> TranspileResult:
+        """Route SELECT / DML statements through the sqlglot-based QueryTranspiler."""
+        try:
+            converted_sql, warnings, doc_refs = transpile_script(sql, src.value, tgt.value)
+        except Exception as exc:
+            converted_sql = sql
+            warnings = [IRWarning(
+                feature="QUERY_TRANSPILE_ERROR",
+                message=f"Query transpilation failed: {exc}. Returning source SQL unchanged.",
+                severity=Warningseverity.ERROR,
+            )]
+            doc_refs = []
+
+        # Detect the primary statement type for the result metadata
+        stmts = [s for s in _split_statements(sql) if s.strip()]
+        stmt_type = detect_statement_type(stmts[0]) if stmts else ObjectType.SELECT_QUERY
+        detected_object_type = stmt_type or ObjectType.SELECT_QUERY
+
+        unsupported = [w for w in warnings if w.unsupported]
+        clean_warnings = [w for w in warnings if not w.unsupported]
+
+        confidence_score, confidence_level = compute_confidence(clean_warnings, unsupported, [])
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+        return TranspileResult(
+            converted_sql=converted_sql,
+            source_dialect=src,
+            target_dialect=tgt,
+            object_type=detected_object_type,
+            objects=[TranspiledObject(
+                object_type=detected_object_type,
+                name="query",
+                sql=converted_sql,
+            )],
+            warnings=clean_warnings,
+            unsupported_features=unsupported,
+            doc_references=doc_refs,
             confidence_score=confidence_score,
             confidence_level=confidence_level,
             elapsed_ms=elapsed_ms,
