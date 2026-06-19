@@ -125,6 +125,8 @@ class RedshiftParser(DialectParser):
         db_name = table_node.catalog if table_node else None
 
         is_temp = bool(node.args.get("temporary"))
+        or_replace = bool(node.args.get("replace"))
+        if_not_exists = bool(node.args.get("exists"))
 
         columns: List[IRColumn] = []
         pk: Optional[IRPrimaryKey] = None
@@ -171,6 +173,8 @@ class RedshiftParser(DialectParser):
             unique_constraints=uniques,
             check_constraints=checks,
             is_temporary=is_temp,
+            or_replace=or_replace,
+            if_not_exists=if_not_exists,
             distribution=distribution,
             sort_key=sort_key,
         )
@@ -185,6 +189,18 @@ class RedshiftParser(DialectParser):
         name = col_def.name
         type_node = col_def.args.get("kind")
         type_str = type_node.sql("redshift") if type_node else "VARCHAR"
+
+        # sqlglot normalizes Redshift TEXT → VARCHAR(MAX) when using sql("redshift").
+        # Restore the original type name to preserve TEXT → GenericType.TEXT mapping.
+        # Also try the generic sql() form for other normalizations, falling back to the
+        # Redshift-specific form if the generic form yields UNKNOWN.
+        if type_node:
+            generic_str = type_node.sql()
+            if generic_str and generic_str != type_str:
+                from app.ir.models import GenericType as _GT
+                _generic_candidate, _p, _s, _l = self.mapper.source_type_to_generic(self.dialect, generic_str)
+                if _generic_candidate != _GT.UNKNOWN:
+                    type_str = generic_str
 
         ir_type, w, d = self._parse_data_type(type_str)
         warnings.extend(w)

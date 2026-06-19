@@ -99,7 +99,16 @@ class FabricDWGenerator(DialectGenerator):
             lines.append(f"    {uq_name}UNIQUE ({uq_cols})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE TABLE {qname} (\n{body}\n)"
+        core_sql = f"CREATE TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            sql = f"DROP TABLE IF EXISTS {qname};\n{core_sql}"
+        elif table.if_not_exists:
+            sql = (
+                f"IF OBJECT_ID(N'{qname}', N'U') IS NULL\nBEGIN\n"
+                f"    {core_sql.replace(chr(10), chr(10) + '    ')}\nEND;"
+            )
+        else:
+            sql = core_sql
 
         # Fabric DW WITH clause: only CLUSTER BY, no DISTRIBUTION
         cluster_cols = None
@@ -182,8 +191,31 @@ class FabricDWGenerator(DialectGenerator):
 
         parts = [self._quote_identifier(col.name), type_str]
 
+        # Fabric DW does NOT support IDENTITY columns in CREATE TABLE DDL.
+        # Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/tables
+        # Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
         if col.identity:
-            parts.append(f"IDENTITY({col.identity.start},{col.identity.increment})")
+            warnings.append(IRWarning(
+                feature="IDENTITY_NOT_SUPPORTED_FABRIC_DW",
+                message=(
+                    f"Column '{col.name}': IDENTITY({col.identity.start},{col.identity.increment}) "
+                    f"is NOT supported in Microsoft Fabric Data Warehouse. "
+                    f"IDENTITY columns are not part of the Fabric DW T-SQL surface area. "
+                    f"The IDENTITY property has been removed. "
+                    f"Use surrogate keys from your ingestion pipeline (e.g., ROW_NUMBER in a CTAS, "
+                    f"or generate keys in your ELT/Fabric Data Pipeline)."
+                ),
+                doc_url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tables",
+                severity=Warningseverity.WARNING,
+                fallback_applied=True,
+                unsupported=True,
+            ))
+            doc_refs.append(IRDocReference(
+                title="Fabric DW Tables — IDENTITY not supported",
+                url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tables",
+                platform="fabric_dw",
+                purpose="IDENTITY column is not supported in Fabric DW",
+            ))
 
         if not col.is_nullable:
             parts.append("NOT NULL")
@@ -226,12 +258,8 @@ class FabricDWGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Fabric DW CREATE VIEW", url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql", platform="fabric_dw", purpose="View generation")]
         or_replace = "OR ALTER " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)
-        defn = self._convert_nvl2_to_case(defn)
-        defn = self._convert_nvl_aware(defn)        # NVL → ISNULL
-        defn = self._convert_decode_to_case(defn)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
+        defn, warnings = self._apply_tsql_view_conversions(view.definition)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW  →  NOT SUPPORTED in Fabric DW
@@ -244,8 +272,13 @@ class FabricDWGenerator(DialectGenerator):
         Fabric DW does NOT support CREATE MATERIALIZED VIEW (verified June 2026).
         Docs: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
 
-        Fallback: generate a standard view with a CTAS comment for manual refresh.
-        This is the documented workaround pattern.
+        Fallback pattern (from Redshift-Fabric-Transpiler reference):
+          1. CREATE TABLE <name> via CTAS for initial load
+          2. CREATE PROCEDURE usp_refresh_<name> that:
+             - Creates a temp table via CTAS with the query
+             - DROPs the old table
+             - Renames the temp table via sp_rename
+        This gives a production-ready refresh stored proc.
         """
         doc_refs = [IRDocReference(
             title="Fabric DW T-SQL Surface Area",
@@ -255,29 +288,50 @@ class FabricDWGenerator(DialectGenerator):
         )]
 
         qname = self._qualified_name(mv)
+        schema = self._quote_identifier(mv.schema_name) if mv.schema_name else "[dbo]"
+        bare_name = mv.name
+        temp_name = f"{bare_name}_tmp"
+        qtemp = f"{schema}.{self._quote_identifier(temp_name)}"
+        proc_name = f"{schema}.[usp_refresh_{bare_name}]"
+
+        defn, conv_warnings = self._apply_tsql_view_conversions(mv.definition)
+
         sql = (
             f"-- Fabric DW does NOT support CREATE MATERIALIZED VIEW.\n"
             f"-- Docs: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area\n"
-            f"-- Option 1: Create a standard VIEW (no pre-computation)\n"
-            f"CREATE VIEW {qname} AS\n"
-            f"{mv.definition};\n"
+            f"-- Pattern: CTAS table + refresh stored procedure (atomic swap via sp_rename).\n"
             f"\n"
-            f"-- Option 2: Materialize via CTAS (run manually or on a schedule)\n"
-            f"-- CREATE TABLE {qname}_snapshot AS\n"
-            f"-- SELECT * FROM ({mv.definition}) AS src;"
+            f"-- Step 1: Initial materialization via CTAS\n"
+            f"CREATE TABLE {qname} AS\n"
+            f"{defn};\n"
+            f"\n"
+            f"-- Step 2: Refresh stored procedure (call on a schedule via Fabric Data Pipeline)\n"
+            f"CREATE OR ALTER PROCEDURE {proc_name}\n"
+            f"AS\n"
+            f"BEGIN\n"
+            f"    -- Create temp table with fresh data\n"
+            f"    DROP TABLE IF EXISTS {qtemp};\n"
+            f"    CREATE TABLE {qtemp} AS\n"
+            f"    {defn};\n"
+            f"\n"
+            f"    -- Atomic swap: drop old, rename new\n"
+            f"    DROP TABLE IF EXISTS {qname};\n"
+            f"    EXEC sp_rename '{schema}.{self._quote_identifier(temp_name)}', '{bare_name}';\n"
+            f"END;"
         )
 
-        warnings = [IRWarning(
+        warnings = list(conv_warnings)
+        warnings.append(IRWarning(
             feature="MV_NOT_SUPPORTED_FABRIC_DW",
             message="Fabric DW does not support CREATE MATERIALIZED VIEW. "
-                    "Converted to a standard VIEW. "
-                    "For pre-computed results, use CTAS to a table and refresh on a schedule "
-                    "via Fabric Data Pipeline or Notebook.",
+                    f"Converted to a CTAS table with a refresh stored procedure "
+                    f"({proc_name}). Schedule the proc via Fabric Data Pipeline "
+                    f"or Notebook for periodic refresh.",
             doc_url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area",
             severity=Warningseverity.WARNING,
             unsupported=True,
             fallback_applied=True,
-        )]
+        ))
 
         return sql, warnings, doc_refs
 

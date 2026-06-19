@@ -89,7 +89,12 @@ class SnowflakeGenerator(DialectGenerator):
             lines.append(f"    {uq_name}UNIQUE ({uq_cols})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE {prefix}TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            sql = f"CREATE OR REPLACE {prefix}TABLE {qname} (\n{body}\n)"
+        elif table.if_not_exists:
+            sql = f"CREATE {prefix}TABLE IF NOT EXISTS {qname} (\n{body}\n)"
+        else:
+            sql = f"CREATE {prefix}TABLE {qname} (\n{body}\n)"
 
         # Warn about Redshift/Synapse distribution → no equivalent in Snowflake
         if table.distribution:
@@ -294,12 +299,9 @@ class SnowflakeGenerator(DialectGenerator):
         or_replace = "OR REPLACE " if view.or_replace else ""
         secure = "SECURE " if view.is_secure else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
-        defn = self._convert_isnull_to_nvl(defn)          # ISNULL → NVL (Snowflake native)
-        # NVL, NVL2, DECODE are all native to Snowflake — no conversion needed
+        defn, warnings = self._apply_snowflake_view_conversions(view.definition)
         sql = f"CREATE {or_replace}{secure}VIEW {qname} AS\n{defn};"
-        return sql, [], doc_refs
+        return sql, warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -349,10 +351,13 @@ class SnowflakeGenerator(DialectGenerator):
             cluster_cols = ", ".join(self._quote_identifier(c) for c in mv.cluster_by.columns)
             clauses.append(f"CLUSTER BY ({cluster_cols})")
 
+        defn, conv_warnings = self._apply_snowflake_view_conversions(mv.definition)
+        warnings.extend(conv_warnings)
+
         clause_str = "\n".join(clauses)
         if clause_str:
-            sql = f"CREATE MATERIALIZED VIEW {qname}\n{clause_str}\nAS\n{mv.definition};"
+            sql = f"CREATE MATERIALIZED VIEW {qname}\n{clause_str}\nAS\n{defn};"
         else:
-            sql = f"CREATE MATERIALIZED VIEW {qname} AS\n{mv.definition};"
+            sql = f"CREATE MATERIALIZED VIEW {qname} AS\n{defn};"
 
         return sql, warnings, doc_refs

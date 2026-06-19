@@ -77,7 +77,12 @@ class RedshiftGenerator(DialectGenerator):
             lines.append(f"    {uq_name}UNIQUE ({uq_cols})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE {temp}TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            sql = f"DROP TABLE IF EXISTS {qname};\nCREATE {temp}TABLE {qname} (\n{body}\n)"
+        elif table.if_not_exists:
+            sql = f"CREATE {temp}TABLE IF NOT EXISTS {qname} (\n{body}\n)"
+        else:
+            sql = f"CREATE {temp}TABLE {qname} (\n{body}\n)"
 
         # Distribution
         dist_sql, w2, d2 = self._distribution_clause(table)
@@ -220,13 +225,9 @@ class RedshiftGenerator(DialectGenerator):
 
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
-        defn = self._convert_nvl2_to_case(defn)           # NVL2 → CASE WHEN
-        defn = self._convert_isnull_to_nvl(defn)          # ISNULL → NVL
-        defn = self._convert_decode_to_case(defn)         # DECODE native, but keep for safety
+        defn, warnings = self._apply_redshift_view_conversions(view.definition)
         sql = f"CREATE {or_replace}VIEW {qname} AS\n{defn};"
-        return sql, [], doc_refs
+        return sql, warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -262,9 +263,7 @@ class RedshiftGenerator(DialectGenerator):
         auto_refresh = "AUTO REFRESH YES" if mv.auto_refresh else "AUTO REFRESH NO"
         clauses.append(auto_refresh)
 
-        defn = self._convert_backtick_identifiers(mv.definition)
-        defn = self._convert_nvl2_to_case(defn)
-        defn = self._convert_isnull_to_nvl(defn)
+        defn, _ = self._apply_redshift_view_conversions(mv.definition)
 
         clause_str = "\n".join(clauses)
         if clause_str:

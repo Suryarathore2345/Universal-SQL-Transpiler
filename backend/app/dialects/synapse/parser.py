@@ -94,6 +94,9 @@ class SynapseParser(DialectParser):
         schema = (tbl.db if tbl else None) or None
         db = (tbl.catalog if tbl else None) or None
 
+        or_replace = bool(node.args.get("replace"))
+        if_not_exists = bool(node.args.get("exists"))
+
         columns, pk, fks, uniques, checks = [], None, [], [], []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
@@ -117,7 +120,7 @@ class SynapseParser(DialectParser):
         distribution = self._extract_distribution(raw_sql)
         partition = self._extract_partition(raw_sql)
 
-        return IRTable(name=name, schema_name=schema, database_name=db, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, distribution=distribution, partition_by=partition), warnings, doc_refs
+        return IRTable(name=name, schema_name=schema, database_name=db, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, distribution=distribution, partition_by=partition, or_replace=or_replace, if_not_exists=if_not_exists), warnings, doc_refs
 
     def _parse_column_def(self, col_def: exp.ColumnDef) -> Tuple[IRColumn, List[IRWarning], List[IRDocReference]]:
         warnings, doc_refs = [], []

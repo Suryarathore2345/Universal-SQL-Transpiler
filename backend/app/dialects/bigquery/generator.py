@@ -83,7 +83,12 @@ class BigQueryGenerator(DialectGenerator):
             lines.append(f"  FOREIGN KEY ({cols}) REFERENCES {ref_q} ({ref_cols}) NOT ENFORCED")
 
         body = ",\n".join(lines)
-        sql = f"CREATE TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            sql = f"CREATE OR REPLACE TABLE {qname} (\n{body}\n)"
+        elif table.if_not_exists:
+            sql = f"CREATE TABLE IF NOT EXISTS {qname} (\n{body}\n)"
+        else:
+            sql = f"CREATE TABLE {qname} (\n{body}\n)"
 
         # PARTITION BY
         partition_expr = self._partition_clause(table, warnings, doc_refs)
@@ -211,12 +216,8 @@ class BigQueryGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="BigQuery CREATE VIEW", url="https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_view_statement", platform="bigquery", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_nvl2_to_case(defn)         # NVL2 → CASE WHEN
-        defn = self._convert_nvl_to_ifnull(defn)        # NVL → IFNULL
-        defn = self._convert_isnull_to_ifnull(defn)     # ISNULL → IFNULL
-        defn = self._convert_decode_to_case(defn)        # DECODE → CASE
-        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
+        defn, warnings = self._apply_bigquery_view_conversions(view.definition)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -251,14 +252,14 @@ class BigQueryGenerator(DialectGenerator):
             f")"
         )
 
+        defn, conv_warnings = self._apply_bigquery_view_conversions(mv.definition)
         sql = (
             f"CREATE {or_replace}MATERIALIZED VIEW {qname}\n"
             f"{options_str}\n"
             f"AS\n"
-            f"{mv.definition};"
+            f"{defn};"
         )
-
-        warnings = [IRWarning(
+        warnings = list(conv_warnings) + [IRWarning(
             feature="BIGQUERY_MV_LIMITATIONS",
             message="BigQuery materialized views support only simple SELECT queries "
                     "(aggregation without subqueries, UNION, or JOIN to MVs). "
@@ -267,6 +268,7 @@ class BigQueryGenerator(DialectGenerator):
             doc_url="https://cloud.google.com/bigquery/docs/materialized-views-intro#limitations",
             severity=Warningseverity.WARNING,
         )]
+
 
         return sql, warnings, doc_refs
 

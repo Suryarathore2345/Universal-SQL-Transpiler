@@ -90,6 +90,8 @@ class SQLServerParser(DialectParser):
         schema = tbl.db if tbl else None
         db = tbl.catalog if tbl else None
         is_temp = bool(node.args.get("temporary")) or name.startswith("#")
+        or_replace = bool(node.args.get("replace"))
+        if_not_exists = bool(node.args.get("exists"))
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
         schema_expr = node.args.get("this")
@@ -111,7 +113,7 @@ class SQLServerParser(DialectParser):
                 elif isinstance(expr, exp.UniqueColumnConstraint):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
 
-        return IRTable(name=name, schema_name=schema or None, database_name=db or None, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, is_temporary=is_temp), warnings, doc_refs
+        return IRTable(name=name, schema_name=schema or None, database_name=db or None, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, is_temporary=is_temp, or_replace=or_replace, if_not_exists=if_not_exists), warnings, doc_refs
 
     def _parse_column_def(self, col_def: exp.ColumnDef) -> Tuple[IRColumn, List[IRWarning], List[IRDocReference]]:
         warnings, doc_refs = [], []

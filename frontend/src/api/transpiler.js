@@ -42,24 +42,27 @@ export async function fetchLimitations(dialect, source) {
  * @param {string} params.sourceDialect
  * @param {string} params.targetDialect
  * @param {boolean} [params.includeIr]
+ * @param {string|null} [params.targetSchema]  Dynamic schema override (null = hardcoded)
  * @returns {Promise<Object>} TranspileResponse
  */
-export async function transpile({ sql, sourceDialect, targetDialect, includeIr = false }) {
+export async function transpile({ sql, sourceDialect, targetDialect, includeIr = false, targetSchema = null }) {
+  const body = {
+    sql,
+    source_dialect: sourceDialect,
+    target_dialect: targetDialect,
+    include_ir: includeIr,
+  }
+  if (targetSchema) body.target_schema = targetSchema
+
   const res = await fetch(`${BASE}/transpile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sql,
-      source_dialect: sourceDialect,
-      target_dialect: targetDialect,
-      include_ir: includeIr,
-    }),
+    body: JSON.stringify(body),
   })
 
   const data = await res.json()
 
   if (!res.ok) {
-    // 400 comes with { detail: "..." }
     throw new Error(data.detail || data.error || `HTTP ${res.status}`)
   }
 

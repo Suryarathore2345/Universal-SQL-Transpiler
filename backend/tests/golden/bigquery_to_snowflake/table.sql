@@ -1,4 +1,4 @@
-CREATE TABLE analytics.orders (
+CREATE OR REPLACE TABLE analytics.orders (
     "order_id" TINYINT NOT NULL,
     "customer_id" TINYINT NOT NULL,
     "amount" NUMBER(18,2) NOT NULL,

@@ -21,6 +21,8 @@ import DocRefsPanel from './components/DocRefsPanel.jsx'
 import LimitationsPanel from './components/LimitationsPanel.jsx'
 import ConfidenceBadge from './components/ConfidenceBadge.jsx'
 import ReportDashboard from './components/ReportDashboard.jsx'
+import UploadButton from './components/UploadButton.jsx'
+import DownloadMenu from './components/DownloadMenu.jsx'
 import { fetchDialects, fetchLimitations, transpile } from './api/transpiler.js'
 import { DIALECT_COLORS, DIALECT_SAMPLES } from './data/dialectMeta.js'
 
@@ -37,6 +39,10 @@ export default function App() {
   const [error, setError]             = useState(null)
   const [copied, setCopied]           = useState(false)
   const [limitations, setLimitations] = useState([])
+
+  // Schema toggle — "hardcoded" (null) or "dynamic" (user-set schema name)
+  const [schemaMode, setSchemaMode]     = useState('hardcoded')  // 'hardcoded' | 'dynamic'
+  const [targetSchema, setTargetSchema] = useState('')
 
   // Phase 8 — confidence + report
   const [confidenceScore, setConfidenceScore] = useState(null)
@@ -60,21 +66,18 @@ export default function App() {
       .catch(() => setLimitations([]))
   }, [targetDialect, sourceDialect])
 
-  // When source dialect changes, update sample SQL to match that dialect's syntax
+  // When source dialect changes, always switch to that dialect's sample SQL —
+  // keeping edited text from the old dialect around is confusing since it's
+  // very likely syntactically wrong for the newly selected source dialect.
   const handleSourceChange = useCallback((newKey) => {
     setSrc(newKey)
+    setSourceSql(DIALECT_SAMPLES[newKey] ?? '')
     setTargetSql('')
     setError(null)
     setConfidenceScore(null)
     setConfidenceLevel(null)
     setLastResult(null)
-    // Only replace if user hasn't modified the default (check against all samples)
-    const allSamples = Object.values(DIALECT_SAMPLES)
-    const isUsingDefault = allSamples.some(s => sourceSql.trim() === s.trim())
-    if (isUsingDefault) {
-      setSourceSql(DIALECT_SAMPLES[newKey] ?? '')
-    }
-  }, [sourceSql])
+  }, [])
 
   const handleSwap = useCallback(() => {
     setSrc(targetDialect)
@@ -108,6 +111,7 @@ export default function App() {
         sql: sourceSql,
         sourceDialect,
         targetDialect,
+        targetSchema: schemaMode === 'dynamic' && targetSchema.trim() ? targetSchema.trim() : null,
       })
       setTargetSql(result.converted_sql)
       setWarnings(result.warnings ?? [])
@@ -141,6 +145,18 @@ export default function App() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const handleUpload = useCallback((text) => {
+    setSourceSql(text)
+    setTargetSql('')
+    setWarnings([])
+    setUnsupported([])
+    setDocRefs([])
+    setError(null)
+    setConfidenceScore(null)
+    setConfidenceLevel(null)
+    setLastResult(null)
+  }, [])
 
   const srcDialect = dialects.find(d => d.key === sourceDialect)
   const tgtDialect = dialects.find(d => d.key === targetDialect)
@@ -227,6 +243,28 @@ export default function App() {
                 {srcDialect?.display_name ?? sourceDialect}
               </span>
               <span className="pane-hint">source</span>
+              <UploadButton onUpload={handleUpload} disabled={loading} />
+              <div className="schema-toggle-wrap">
+                <button
+                  className={`btn-schema-mode ${schemaMode === 'dynamic' ? 'btn-schema-mode--active' : ''}`}
+                  onClick={() => setSchemaMode(m => m === 'hardcoded' ? 'dynamic' : 'hardcoded')}
+                  disabled={loading}
+                  title="Toggle schema: Hardcoded (keep source schema) or Dynamic (override all schemas)"
+                >
+                  Schema: {schemaMode === 'hardcoded' ? 'Hardcoded' : 'Dynamic'}
+                </button>
+                {schemaMode === 'dynamic' && (
+                  <input
+                    className="schema-name-input"
+                    value={targetSchema}
+                    onChange={e => setTargetSchema(e.target.value)}
+                    placeholder="e.g. dbo"
+                    title="Schema name to use in the output SQL"
+                    disabled={loading}
+                    spellCheck={false}
+                  />
+                )}
+              </div>
             </div>
             <SqlEditor
               value={sourceSql}
@@ -262,9 +300,17 @@ export default function App() {
               </span>
               <span className="pane-hint">output</span>
               {targetSql && (
-                <button className="btn-copy" onClick={handleCopy}>
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
+                <>
+                  <button className="btn-copy" onClick={handleCopy}>
+                    {copied ? '✓ Copied' : 'Copy'}
+                  </button>
+                  <DownloadMenu
+                    allSql={targetSql}
+                    objects={lastResult?.objects ?? []}
+                    sourceDialect={sourceDialect}
+                    targetDialect={targetDialect}
+                  />
+                </>
               )}
             </div>
             <SqlEditor

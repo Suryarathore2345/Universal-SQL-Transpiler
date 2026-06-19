@@ -1,3 +1,9 @@
+BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE "analytics"."orders" PURGE';
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END;
+/
 CREATE TABLE "analytics"."orders" (
     "order_id" NUMBER(3) NOT NULL,
     "customer_id" NUMBER(3) NOT NULL,

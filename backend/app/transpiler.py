@@ -13,8 +13,8 @@ from typing import Dict, List, Optional, Type
 from app.dialects.base import DialectGenerator, DialectParser
 from app.ir.models import (
     Dialect, IRDDLObject, IRDocReference, IRFunction, IRMaterializedView,
-    IRProcedure, IRTable, IRView, IRWarning, ObjectType, TranspileResult,
-    Warningseverity,
+    IRProcedure, IRTable, IRView, IRWarning, ObjectType, TranspiledObject,
+    TranspileResult, Warningseverity,
 )
 from app.validator import validate_residuals, compute_confidence
 
@@ -29,6 +29,7 @@ def _load_parsers() -> Dict[Dialect, DialectParser]:
     from app.dialects.sqlserver.parser import SQLServerParser
     from app.dialects.synapse.parser import SynapseParser
     from app.dialects.fabric_dw.parser import FabricDWParser
+    from app.dialects.fabric_lakehouse.parser import FabricLakehouseParser
     from app.dialects.databricks.parser import DatabricksParser
     from app.dialects.oracle.parser import OracleParser
     from app.dialects.bigquery.parser import BigQueryParser
@@ -39,6 +40,7 @@ def _load_parsers() -> Dict[Dialect, DialectParser]:
         Dialect.SQLSERVER: SQLServerParser(),
         Dialect.SYNAPSE: SynapseParser(),
         Dialect.FABRIC_DW: FabricDWParser(),
+        Dialect.FABRIC_LAKEHOUSE: FabricLakehouseParser(),
         Dialect.DATABRICKS: DatabricksParser(),
         Dialect.ORACLE: OracleParser(),
         Dialect.BIGQUERY: BigQueryParser(),
@@ -51,6 +53,7 @@ def _load_generators() -> Dict[Dialect, DialectGenerator]:
     from app.dialects.sqlserver.generator import SQLServerGenerator
     from app.dialects.synapse.generator import SynapseGenerator
     from app.dialects.fabric_dw.generator import FabricDWGenerator
+    from app.dialects.fabric_lakehouse.generator import FabricLakehouseGenerator
     from app.dialects.databricks.generator import DatabricksGenerator
     from app.dialects.oracle.generator import OracleGenerator
     from app.dialects.bigquery.generator import BigQueryGenerator
@@ -61,6 +64,7 @@ def _load_generators() -> Dict[Dialect, DialectGenerator]:
         Dialect.SQLSERVER: SQLServerGenerator(),
         Dialect.SYNAPSE: SynapseGenerator(),
         Dialect.FABRIC_DW: FabricDWGenerator(),
+        Dialect.FABRIC_LAKEHOUSE: FabricLakehouseGenerator(),
         Dialect.DATABRICKS: DatabricksGenerator(),
         Dialect.ORACLE: OracleGenerator(),
         Dialect.BIGQUERY: BigQueryGenerator(),
@@ -104,6 +108,7 @@ class Transpiler:
         source_dialect: str,
         target_dialect: str,
         object_type: Optional[str] = None,
+        target_schema: Optional[str] = None,
     ) -> TranspileResult:  # noqa: C901
         """
         Convert SQL DDL from source_dialect to target_dialect.
@@ -113,6 +118,9 @@ class Transpiler:
             source_dialect:  Source dialect key (e.g. "redshift", "snowflake")
             target_dialect:  Target dialect key
             object_type:     Optional hint: "table"|"view"|"materialized_view"|etc.
+            target_schema:   When provided, overrides the schema qualifier on every
+                             generated object (Dynamic mode). Pass None to preserve
+                             source schema names (Hardcoded mode).
 
         Returns:
             TranspileResult with converted_sql, warnings, unsupported_features, doc_references.
@@ -153,6 +161,7 @@ class Transpiler:
         all_unsupported: List[IRWarning] = []
         all_doc_refs: List[IRDocReference] = []
         output_parts: List[str] = []
+        objects: List[TranspiledObject] = []
         detected_object_type = ObjectType.TABLE
 
         parse_results = parser.parse(sql)
@@ -163,6 +172,10 @@ class Transpiler:
 
             if ir_obj is None:
                 continue
+
+            # Dynamic schema override — replace schema qualifier on every object
+            if target_schema is not None and hasattr(ir_obj, "schema_name"):
+                ir_obj.schema_name = target_schema.strip() or None
 
             # Determine object type for the result metadata
             if isinstance(ir_obj, IRTable):
@@ -189,6 +202,11 @@ class Transpiler:
                 continue
 
             output_parts.append(gen_sql)
+            objects.append(TranspiledObject(
+                object_type=detected_object_type,
+                name=getattr(ir_obj, "name", "unknown"),
+                sql=gen_sql,
+            ))
             all_warnings.extend(gen_warnings)
             all_doc_refs.extend(gen_refs)
 
@@ -229,6 +247,7 @@ class Transpiler:
             source_dialect=src,
             target_dialect=tgt,
             object_type=ObjectType(object_type) if object_type else detected_object_type,
+            objects=objects,
             warnings=clean_warnings,
             unsupported_features=unsupported,
             doc_references=deduped_refs,

@@ -72,7 +72,12 @@ class DatabricksGenerator(DialectGenerator):
             lines.append(f"    PRIMARY KEY ({pk_cols})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE {temp}{ext}TABLE {qname} (\n{body}\n)\nUSING DELTA"
+        if table.or_replace:
+            sql = f"CREATE OR REPLACE {temp}{ext}TABLE {qname} (\n{body}\n)\nUSING DELTA"
+        elif table.if_not_exists:
+            sql = f"CREATE {temp}{ext}TABLE IF NOT EXISTS {qname} (\n{body}\n)\nUSING DELTA"
+        else:
+            sql = f"CREATE {temp}{ext}TABLE {qname} (\n{body}\n)\nUSING DELTA"
 
         if table.comment:
             sql += f"\nCOMMENT '{table.comment}'"
@@ -185,12 +190,8 @@ class DatabricksGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Databricks CREATE VIEW", url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-view.html", platform="databricks", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)
-        defn = self._convert_nvl2_to_case(defn)          # NVL2 → CASE WHEN
-        defn = self._convert_isnull_to_ifnull(defn)      # ISNULL → IFNULL
-        defn = self._convert_decode_to_case(defn)         # DECODE → CASE
-        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
+        defn, warnings = self._apply_databricks_view_conversions(view.definition)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -215,14 +216,15 @@ class DatabricksGenerator(DialectGenerator):
 
         qname = self._qualified_name(mv)
         or_replace = "OR REPLACE " if getattr(mv, "or_replace", False) else ""
+        defn, conv_warnings = self._apply_databricks_view_conversions(mv.definition)
         sql = f"CREATE {or_replace}MATERIALIZED VIEW {qname}"
 
         if mv.refresh_schedule:
             sql += f"\nSCHEDULE CRON '{mv.refresh_schedule}'"
 
-        sql += f"\nAS\n{mv.definition};"
+        sql += f"\nAS\n{defn};"
 
-        warnings = [IRWarning(
+        warnings = list(conv_warnings) + [IRWarning(
             feature="DATABRICKS_MV_UNITY_CATALOG",
             message="Databricks materialized views require Unity Catalog and a serverless or "
                     "pro SQL warehouse. "

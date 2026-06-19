@@ -94,7 +94,48 @@ class OracleGenerator(DialectGenerator):
             lines.append(f"    {ck_name}CHECK ({ck.expression})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE {temp}TABLE {qname} (\n{body}\n)"
+        core_sql = f"CREATE {temp}TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            # Oracle has no CREATE OR REPLACE TABLE. Use PL/SQL DROP + CREATE pattern.
+            # Oracle 23c adds IF NOT EXISTS / CREATE OR REPLACE TABLE, but for
+            # maximum compatibility we emit the traditional PL/SQL anonymous block.
+            warnings.append(IRWarning(
+                feature="CREATE_OR_REPLACE_TABLE_ORACLE",
+                message=(
+                    f"Oracle does not support CREATE OR REPLACE TABLE. "
+                    f"Emitting PL/SQL anonymous block that drops the table if it exists, "
+                    f"then recreates it. Requires EXECUTE IMMEDIATE privileges. "
+                    f"Oracle 23c+ supports CREATE OR REPLACE TABLE natively."
+                ),
+                doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-TABLE.html",
+                severity=Warningseverity.WARNING,
+                fallback_applied=True,
+            ))
+            sql = (
+                f"BEGIN\n"
+                f"  EXECUTE IMMEDIATE 'DROP TABLE {qname} PURGE';\n"
+                f"EXCEPTION\n"
+                f"  WHEN OTHERS THEN NULL;\n"
+                f"END;\n"
+                f"/\n"
+                f"{core_sql}"
+            )
+        elif table.if_not_exists:
+            # Oracle 23c+ supports CREATE TABLE IF NOT EXISTS natively.
+            warnings.append(IRWarning(
+                feature="IF_NOT_EXISTS_ORACLE_23C",
+                message=(
+                    "CREATE TABLE IF NOT EXISTS requires Oracle 23c or later. "
+                    "For older Oracle versions, use a PL/SQL block with exception handling. "
+                    "Emitting Oracle 23c syntax."
+                ),
+                doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-TABLE.html",
+                severity=Warningseverity.INFO,
+                fallback_applied=False,
+            ))
+            sql = f"CREATE {temp}TABLE IF NOT EXISTS {qname} (\n{body}\n)"
+        else:
+            sql = core_sql
 
         # PARTITION BY
         if table.partition_by and table.partition_by.columns:
@@ -236,11 +277,8 @@ class OracleGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Oracle CREATE VIEW", url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-VIEW.html", platform="oracle", purpose="View generation")]
         or_replace = "OR REPLACE " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
-        defn = self._convert_isnull_to_nvl(defn)          # ISNULL → NVL (Oracle native)
-        # NVL, NVL2, DECODE are all native to Oracle — no conversion needed
-        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
+        defn, warnings = self._apply_oracle_view_conversions(view.definition)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -262,6 +300,7 @@ class OracleGenerator(DialectGenerator):
 
         qname = self._qualified_name(mv)
         refresh_clause = "REFRESH ON COMMIT" if mv.auto_refresh else "REFRESH ON DEMAND"
+        defn, conv_warnings = self._apply_oracle_view_conversions(mv.definition)
 
         sql = (
             f"CREATE MATERIALIZED VIEW {qname}\n"
@@ -269,10 +308,10 @@ class OracleGenerator(DialectGenerator):
             f"{refresh_clause}\n"
             f"ENABLE QUERY REWRITE\n"
             f"AS\n"
-            f"{mv.definition};"
+            f"{defn};"
         )
 
-        warnings = [IRWarning(
+        warnings = list(conv_warnings) + [IRWarning(
             feature="ORACLE_MV_QUERY_REWRITE",
             message="Oracle MV generated with ENABLE QUERY REWRITE — optimizer may automatically "
                     "rewrite queries to use this MV. "

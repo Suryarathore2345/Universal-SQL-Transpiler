@@ -82,6 +82,19 @@ _DIALECT_META: list[dict[str, Any]] = [
         "notes": "Materialized views are not supported. CLUSTER BY supports up to 4 columns.",
     },
     {
+        "key": "fabric_lakehouse",
+        "display_name": "Microsoft Fabric Lakehouse",
+        "short_name": "Fabric Lakehouse",
+        "logo_key": "fabric_lakehouse",
+        "vendor": "Microsoft",
+        "supported_objects": ["table", "view", "materialized_view", "function"],
+        "notes": (
+            "Spark SQL on Delta Lake. "
+            "Materialized Lake Views (MLV) require Runtime 1.3+. "
+            "No stored procedures — use Fabric Notebooks."
+        ),
+    },
+    {
         "key": "databricks",
         "display_name": "Databricks (Delta Lake)",
         "short_name": "Databricks",
@@ -143,6 +156,7 @@ async def transpile(request: TranspileRequest) -> TranspileResponse:
             source_dialect=request.source_dialect,
             target_dialect=request.target_dialect,
             object_type=request.object_type,
+            target_schema=request.target_schema or None,
         )
     except Exception as exc:
         logger.exception("Transpiler error [%s]: %s", request_id, exc)

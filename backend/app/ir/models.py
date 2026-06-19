@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 class Dialect(str, Enum):
     REDSHIFT = "redshift"
     FABRIC_DW = "fabric_dw"
+    FABRIC_LAKEHOUSE = "fabric_lakehouse"
     SYNAPSE = "synapse"
     SQLSERVER = "sqlserver"
     DATABRICKS = "databricks"
@@ -365,6 +366,8 @@ class IRTable(BaseModel):
     indexes: List[IRIndex] = Field(default_factory=list)
     is_temporary: bool = False
     is_external: bool = False
+    or_replace: bool = False       # CREATE OR REPLACE TABLE — idempotent recreation
+    if_not_exists: bool = False    # CREATE TABLE IF NOT EXISTS — skip if already exists
     table_properties: IRTableProperties = Field(default_factory=IRTableProperties)
     comment: Optional[str] = None
     tags: Dict[str, str] = Field(default_factory=dict)
@@ -562,11 +565,21 @@ class IRDocReference(BaseModel):
 # Transpilation result
 # ---------------------------------------------------------------------------
 
+class TranspiledObject(BaseModel):
+    """One generated DDL statement plus the object type it came from.
+    Lets the API offer per-type downloads (e.g. "Download Views only")
+    without re-parsing converted_sql on the client."""
+    object_type: ObjectType
+    name: str
+    sql: str
+
+
 class TranspileResult(BaseModel):
     converted_sql: str
     source_dialect: Dialect
     target_dialect: Dialect
     object_type: ObjectType
+    objects: List[TranspiledObject] = Field(default_factory=list)
     warnings: List[IRWarning] = Field(default_factory=list)
     unsupported_features: List[IRWarning] = Field(default_factory=list)
     doc_references: List[IRDocReference] = Field(default_factory=list)

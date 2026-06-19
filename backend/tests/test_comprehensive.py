@@ -49,14 +49,15 @@ ALL_DIALECTS: list[str] = [d.value for d in Dialect]
 
 # Kitchen-sink SQL fixtures keyed by source dialect key
 FIXTURES: dict[str, Path] = {
-    "redshift":   COMPREHENSIVE_DIR / "kitchen_sink_redshift.sql",
-    "snowflake":  COMPREHENSIVE_DIR / "kitchen_sink_snowflake.sql",
-    "sqlserver":  COMPREHENSIVE_DIR / "kitchen_sink_sqlserver.sql",
-    "synapse":    COMPREHENSIVE_DIR / "kitchen_sink_synapse.sql",
-    "fabric_dw":  COMPREHENSIVE_DIR / "kitchen_sink_fabric_dw.sql",
-    "databricks": COMPREHENSIVE_DIR / "kitchen_sink_databricks.sql",
-    "oracle":     COMPREHENSIVE_DIR / "kitchen_sink_oracle.sql",
-    "bigquery":   COMPREHENSIVE_DIR / "kitchen_sink_bigquery.sql",
+    "redshift":         COMPREHENSIVE_DIR / "kitchen_sink_redshift.sql",
+    "snowflake":        COMPREHENSIVE_DIR / "kitchen_sink_snowflake.sql",
+    "sqlserver":        COMPREHENSIVE_DIR / "kitchen_sink_sqlserver.sql",
+    "synapse":          COMPREHENSIVE_DIR / "kitchen_sink_synapse.sql",
+    "fabric_dw":        COMPREHENSIVE_DIR / "kitchen_sink_fabric_dw.sql",
+    "fabric_lakehouse": COMPREHENSIVE_DIR / "kitchen_sink_fabric_lakehouse.sql",
+    "databricks":       COMPREHENSIVE_DIR / "kitchen_sink_databricks.sql",
+    "oracle":           COMPREHENSIVE_DIR / "kitchen_sink_oracle.sql",
+    "bigquery":         COMPREHENSIVE_DIR / "kitchen_sink_bigquery.sql",
 }
 
 # ---------------------------------------------------------------------------

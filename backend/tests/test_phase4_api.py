@@ -31,7 +31,7 @@ class TestHealth:
 
     def test_dialects_loaded(self):
         body = client.get("/api/health").json()
-        assert body["dialects_loaded"] == 8
+        assert body["dialects_loaded"] == 9
 
     def test_version_present(self):
         body = client.get("/api/health").json()
@@ -49,13 +49,13 @@ class TestDialects:
 
     def test_eight_dialects(self):
         body = client.get("/api/dialects").json()
-        assert len(body["dialects"]) == 8
+        assert len(body["dialects"]) == 9
 
     def test_all_dialect_keys_present(self):
         body = client.get("/api/dialects").json()
         keys = {d["key"] for d in body["dialects"]}
         expected = {"redshift", "snowflake", "sqlserver", "synapse",
-                    "fabric_dw", "databricks", "oracle", "bigquery"}
+                    "fabric_dw", "fabric_lakehouse", "databricks", "oracle", "bigquery"}
         assert keys == expected
 
     def test_dialect_has_required_fields(self):

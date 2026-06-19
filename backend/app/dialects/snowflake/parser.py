@@ -120,6 +120,8 @@ class SnowflakeParser(DialectParser):
 
         # Snowflake-specific: TEMPORARY, TRANSIENT
         is_temp = bool(node.args.get("temporary"))
+        or_replace = bool(node.args.get("replace"))
+        if_not_exists = bool(node.args.get("exists"))
         is_transient = "TRANSIENT" in raw_sql.upper()
 
         if is_transient:
@@ -176,6 +178,8 @@ class SnowflakeParser(DialectParser):
             unique_constraints=uniques,
             check_constraints=checks,
             is_temporary=is_temp,
+            or_replace=or_replace,
+            if_not_exists=if_not_exists,
             cluster_by=cluster_by,
             table_properties=props,
         )

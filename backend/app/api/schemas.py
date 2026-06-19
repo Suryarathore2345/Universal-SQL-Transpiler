@@ -29,6 +29,9 @@ class TranspileRequest(BaseModel):
                      "procedure"|"function". Omit to auto-detect.
     include_ir:      If true, the response includes the serialized IR snapshot
                      (useful for debugging / the dev panel).
+    target_schema:   When provided, overrides the schema qualifier on every
+                     generated object (Dynamic mode). Omit to preserve the
+                     original schema names from the source SQL (Hardcoded mode).
     """
 
     sql: str = Field(..., min_length=1, description="SQL DDL to transpile")
@@ -36,6 +39,7 @@ class TranspileRequest(BaseModel):
     target_dialect: str = Field(..., description="Target dialect key")
     object_type: Optional[str] = Field(None, description="Optional object type hint")
     include_ir: bool = Field(False, description="Include IR snapshot in response")
+    target_schema: Optional[str] = Field(None, description="Schema override (Dynamic mode)")
 
     @field_validator("sql")
     @classmethod
@@ -82,6 +86,14 @@ class ResidualWarningDetail(BaseModel):
     severity: str = "warning"
 
 
+class TranspiledObjectDetail(BaseModel):
+    """One generated statement plus the object type it came from —
+    lets the frontend offer per-type downloads (Tables only, Views only, ...)."""
+    object_type: str
+    name: str
+    sql: str
+
+
 class TranspileResponse(BaseModel):
     """
     POST /api/transpile  response body.
@@ -90,6 +102,7 @@ class TranspileResponse(BaseModel):
     source_dialect: str
     target_dialect: str
     object_type: str
+    objects: List[TranspiledObjectDetail] = Field(default_factory=list)
     warnings: List[WarningDetail] = Field(default_factory=list)
     unsupported_features: List[UnsupportedFeatureDetail] = Field(default_factory=list)
     doc_references: List[DocReferenceDetail] = Field(default_factory=list)
@@ -151,12 +164,21 @@ class TranspileResponse(BaseModel):
             for w in getattr(result, "residual_warnings", [])
         ]
         ir_snapshot = result.ir_snapshot if include_ir else None
+        objects = [
+            TranspiledObjectDetail(
+                object_type=o.object_type.value if hasattr(o.object_type, "value") else str(o.object_type),
+                name=o.name,
+                sql=o.sql,
+            )
+            for o in getattr(result, "objects", [])
+        ]
 
         return cls(
             converted_sql=result.converted_sql,
             source_dialect=result.source_dialect.value,
             target_dialect=result.target_dialect.value,
             object_type=result.object_type.value,
+            objects=objects,
             warnings=warnings,
             unsupported_features=unsupported,
             doc_references=doc_refs,
@@ -229,3 +251,4 @@ class DialectLimitations(BaseModel):
 
 class LimitationsResponse(BaseModel):
     dialects: List[DialectLimitations]
+

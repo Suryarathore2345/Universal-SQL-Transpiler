@@ -67,6 +67,12 @@ generic_types:
         unsupported: true
         fallback: "SMALLINT"
         fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      fabric_lakehouse:
+        type: "TINYINT"
+        aliases: ["BYTE"]
+        notes: "Spark SQL TINYINT is a true 1-byte signed integer (-128 to 127)."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "TINYINT"
         aliases: []
@@ -115,6 +121,12 @@ generic_types:
         aliases: []
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "SMALLINT"
+        aliases: ["SHORT"]
+        notes: "Spark SQL SMALLINT is a 2-byte signed integer."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "SMALLINT"
         aliases: []
@@ -159,6 +171,12 @@ generic_types:
         type: "INT"
         aliases: []
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "INT"
+        aliases: ["INTEGER"]
+        notes: "Spark SQL INT is a 4-byte signed integer."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "INT"
@@ -205,6 +223,12 @@ generic_types:
         aliases: []
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "BIGINT"
+        aliases: ["LONG"]
+        notes: "Spark SQL BIGINT is an 8-byte signed integer."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "BIGINT"
         aliases: []
@@ -240,10 +264,10 @@ generic_types:
         confidence: verified
       bigquery:
         type: "NUMERIC"
-        aliases: ["DECIMAL"]
+        aliases: ["DECIMAL", "BIGNUMERIC"]
         max_precision: 29
         max_scale: 9
-        notes: "BigQuery NUMERIC max precision 29, max scale 9. For larger: use BIGNUMERIC (76,38)."
+        notes: "BigQuery NUMERIC max precision 29, max scale 9. BIGNUMERIC (76,38) mapped here for parser recognition; emitted as NUMERIC."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#decimal_type"
         confidence: verified
         bignumeric_type: "BIGNUMERIC"
@@ -257,8 +281,9 @@ generic_types:
         confidence: verified
       sqlserver:
         type: "DECIMAL"
-        aliases: ["NUMERIC"]
+        aliases: ["NUMERIC", "MONEY", "SMALLMONEY"]
         max_precision: 38
+        notes: "MONEY=DECIMAL(19,4), SMALLMONEY=DECIMAL(10,4). Mapped here so source MONEY types parse correctly; emitted as DECIMAL on target."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql"
         confidence: verified
       fabric_dw:
@@ -267,10 +292,18 @@ generic_types:
         max_precision: 38
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "DECIMAL"
+        aliases: ["NUMERIC", "DEC"]
+        max_precision: 38
+        notes: "Spark SQL DECIMAL(p,s) max precision 38."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "DECIMAL"
-        aliases: ["NUMERIC"]
+        aliases: ["NUMERIC", "MONEY", "SMALLMONEY"]
         max_precision: 38
+        notes: "MONEY=DECIMAL(19,4), SMALLMONEY=DECIMAL(10,4). Synapse supports MONEY natively but DECIMAL is preferred for portability."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql"
         confidence: verified
       oracle:
@@ -317,6 +350,12 @@ generic_types:
         aliases: []
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "FLOAT"
+        aliases: ["REAL"]
+        notes: "Spark SQL FLOAT is a 4-byte single-precision IEEE float."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "REAL"
         aliases: ["FLOAT(24)"]
@@ -349,7 +388,7 @@ generic_types:
         confidence: verified
       databricks:
         type: "DOUBLE"
-        aliases: []
+        aliases: ["DOUBLE PRECISION"]
         doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
         confidence: verified
       sqlserver:
@@ -361,6 +400,12 @@ generic_types:
         type: "FLOAT"
         aliases: []
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "DOUBLE"
+        aliases: ["DOUBLE PRECISION"]
+        notes: "Spark SQL DOUBLE is an 8-byte double-precision IEEE float."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "FLOAT"
@@ -405,27 +450,33 @@ generic_types:
         confidence: verified
       sqlserver:
         type: "CHAR"
-        aliases: ["CHARACTER"]
+        aliases: ["CHARACTER", "NCHAR"]
         max_length: 8000
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
         confidence: verified
       fabric_dw:
         type: "CHAR"
-        aliases: []
+        aliases: ["NCHAR"]
         notes: "Fabric DW supports CHAR but not NCHAR (use CHAR with UTF-8 collation)."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "STRING"
+        aliases: ["CHAR", "CHARACTER"]
+        notes: "Spark SQL maps all CHAR types to STRING. Length constraints are not enforced."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "CHAR"
-        aliases: []
+        aliases: ["NCHAR"]
         max_length: 8000
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
         confidence: verified
       oracle:
         type: "CHAR"
-        aliases: []
+        aliases: ["NCHAR"]
         max_length: 2000
-        notes: "Oracle CHAR max 2000 bytes. Uses blank-padding comparison semantics."
+        notes: "Oracle CHAR max 2000 bytes. Uses blank-padding comparison semantics. NCHAR (Unicode fixed-length) mapped here."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
 
@@ -434,16 +485,16 @@ generic_types:
     dialects:
       redshift:
         type: "VARCHAR"
-        aliases: ["CHARACTER VARYING", "NVARCHAR", "TEXT"]
+        aliases: ["CHARACTER VARYING", "NVARCHAR"]
         max_length: 65535
-        notes: "Redshift VARCHAR max 65535 bytes. TEXT is an alias for VARCHAR(256)."
+        notes: "Redshift VARCHAR max 65535 bytes. TEXT alias moved to GenericType.TEXT entry for correct CLOB/NVARCHAR(MAX) target mappings."
         doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html"
         confidence: verified
       snowflake:
         type: "VARCHAR"
-        aliases: ["STRING", "TEXT", "NVARCHAR", "CHAR VARYING"]
+        aliases: ["NVARCHAR", "CHAR VARYING"]
         max_length: 16777216
-        notes: "Snowflake VARCHAR max 16MB (16,777,216 chars). Default length is max."
+        notes: "Snowflake VARCHAR max 16MB. STRING/TEXT aliases moved to GenericType.TEXT entry. VARCHAR(n) keeps length semantics."
         doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
         confidence: verified
       bigquery:
@@ -460,17 +511,23 @@ generic_types:
         confidence: verified
       sqlserver:
         type: "VARCHAR"
-        aliases: ["CHARACTER VARYING"]
+        aliases: ["CHARACTER VARYING", "NVARCHAR"]
         max_length: 8000
         notes: "Use NVARCHAR for Unicode. VARCHAR(MAX) = up to 2GB."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
         confidence: verified
       fabric_dw:
         type: "VARCHAR"
-        aliases: []
+        aliases: ["NVARCHAR"]
         max_length_max: "16MB"
         notes: "Fabric DW VARCHAR(MAX) limited to 16MB. NVARCHAR not supported — use VARCHAR."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "STRING"
+        aliases: ["VARCHAR", "CHARACTER VARYING"]
+        notes: "Spark SQL STRING has no length limit. VARCHAR(n) maps to STRING (length not enforced)."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "VARCHAR"
@@ -480,9 +537,9 @@ generic_types:
         confidence: verified
       oracle:
         type: "VARCHAR2"
-        aliases: ["VARCHAR"]
+        aliases: ["VARCHAR", "NVARCHAR2"]
         max_length: 32767
-        notes: "Oracle VARCHAR2 max 32767 (extended) / 4000 (standard MAX_STRING_SIZE). VARCHAR is deprecated alias."
+        notes: "Oracle VARCHAR2 max 32767 (extended) / 4000 (standard MAX_STRING_SIZE). VARCHAR is deprecated alias. NVARCHAR2 (Unicode) mapped here for parser recognition."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
 
@@ -523,6 +580,12 @@ generic_types:
         notes: "Fabric DW VARCHAR(MAX) capped at 16MB. TEXT/NTEXT not supported — use VARCHAR."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "STRING"
+        aliases: []
+        notes: "Spark SQL STRING is unbounded variable-length text."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "VARCHAR(MAX)"
         aliases: []
@@ -531,8 +594,8 @@ generic_types:
         confidence: verified
       oracle:
         type: "CLOB"
-        aliases: ["LONG"]
-        notes: "Oracle CLOB for unbounded text. LONG is deprecated."
+        aliases: ["LONG", "NCLOB"]
+        notes: "Oracle CLOB for unbounded text. LONG is deprecated. NCLOB (Unicode CLOB) mapped here."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
 
@@ -572,6 +635,12 @@ generic_types:
         aliases: []
         notes: "Fabric DW uses BIT (0/1/NULL) for boolean."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "BOOLEAN"
+        aliases: ["BOOL"]
+        notes: "Spark SQL native BOOLEAN type."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "BIT"
@@ -614,6 +683,11 @@ generic_types:
         type: "DATE"
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "DATE"
+        notes: "Spark SQL DATE stores calendar date only (year, month, day)."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "DATE"
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/date-transact-sql"
@@ -653,19 +727,28 @@ generic_types:
         confidence: verified
       sqlserver:
         type: "DATETIME2"
-        aliases: ["DATETIME2(6)"]
-        notes: "SQL Server DATETIME2(0-7) is the modern timestamp. DATETIME is legacy with lower precision."
+        aliases: ["DATETIME2(6)", "DATETIME", "SMALLDATETIME"]
+        notes: "SQL Server DATETIME2(0-7) is the modern timestamp. DATETIME (legacy, 3.33ms precision) and SMALLDATETIME (1-min precision) are mapped here for parser recognition."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetime2-transact-sql"
         confidence: verified
       fabric_dw:
         type: "DATETIME2"
-        aliases: []
-        notes: "Fabric DW DATETIME2 precision limited to 6 digits. DATETIME not supported."
+        aliases: ["DATETIME", "SMALLDATETIME"]
+        max_precision: 6
+        default_precision: 6
+        notes: "Fabric DW DATETIME2 has no default precision — an explicit value (0-6) is mandatory. DATETIME/SMALLDATETIME not supported for tables; mapped to DATETIME2."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "TIMESTAMP"
+        aliases: ["TIMESTAMP_LTZ", "DATETIME"]
+        notes: "Spark SQL TIMESTAMP stores date+time. Timezone-aware depending on spark.sql.session.timeZone setting."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "DATETIME2"
-        aliases: []
+        aliases: ["DATETIME", "SMALLDATETIME"]
+        notes: "Synapse supports DATETIME2 natively. Legacy DATETIME/SMALLDATETIME parsed as TIMESTAMP generic → emitted as DATETIME2."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetime2-transact-sql"
         confidence: verified
       oracle:
@@ -708,12 +791,20 @@ generic_types:
       fabric_dw:
         type: "DATETIME2"
         aliases: []
-        notes: "Fabric DW does not support DATETIMEOFFSET for table columns. Falls back to DATETIME2 with warning. See: https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        max_precision: 6
+        default_precision: 6
+        notes: "Fabric DW does not support DATETIMEOFFSET for table columns. Falls back to DATETIME2 with warning. DATETIME2 precision is mandatory (0-6). See: https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
         unsupported: true
         fallback: "DATETIME2"
         fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      fabric_lakehouse:
+        type: "TIMESTAMP"
+        aliases: ["TIMESTAMPTZ"]
+        notes: "Spark SQL TIMESTAMP is timezone-aware when spark.sql.session.timeZone is configured. No explicit TIMESTAMP WITH TIME ZONE column type."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "DATETIMEOFFSET"
         aliases: []
@@ -753,11 +844,18 @@ generic_types:
         confidence: verified
       fabric_dw:
         type: "DATETIME2"
-        notes: "DATETIMEOFFSET not supported in Fabric DW tables; use DATETIME2."
+        max_precision: 6
+        default_precision: 6
+        notes: "DATETIMEOFFSET not supported in Fabric DW tables; use DATETIME2. Precision is mandatory (0-6)."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
         unsupported: true
         fallback: "DATETIME2"
+      fabric_lakehouse:
+        type: "TIMESTAMP"
+        notes: "Spark SQL TIMESTAMP uses session timezone. TIMESTAMP_LTZ behavior depends on spark.sql.session.timeZone setting."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "DATETIMEOFFSET"
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
@@ -801,6 +899,13 @@ generic_types:
         notes: "Fabric DW TIME precision limited to 6."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no TIME type. Store as STRING in 'HH:MM:SS' format."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
       synapse:
         type: "TIME"
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/time-transact-sql"
@@ -844,9 +949,9 @@ generic_types:
         confidence: verified
       sqlserver:
         type: "VARBINARY"
-        aliases: ["VARBINARY(MAX)"]
+        aliases: ["VARBINARY(MAX)", "BINARY", "IMAGE"]
         max_length: 8000
-        notes: "VARBINARY(MAX) up to 2GB. IMAGE type is deprecated."
+        notes: "VARBINARY(MAX) up to 2GB. BINARY (fixed-length) and IMAGE (deprecated) mapped here for parser recognition."
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
         confidence: verified
       fabric_dw:
@@ -854,6 +959,12 @@ generic_types:
         aliases: []
         notes: "Fabric DW VARBINARY(MAX) limited to 16MB."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+      fabric_lakehouse:
+        type: "BINARY"
+        aliases: ["VARBINARY", "BYTES"]
+        notes: "Spark SQL BINARY is variable-length binary data."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
         type: "VARBINARY"
@@ -900,13 +1011,19 @@ generic_types:
         notes: "Fabric DW VARBINARY(MAX) max 16MB."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "BINARY"
+        notes: "Spark SQL BINARY for large binary objects."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "VARBINARY(MAX)"
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
         confidence: verified
       oracle:
         type: "BLOB"
-        notes: "Oracle BLOB up to (4GB-1)*chunk. For external files use BFILE."
+        aliases: ["LONG RAW"]
+        notes: "Oracle BLOB up to (4GB-1)*chunk. LONG RAW is deprecated binary LOB. For external files use BFILE."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
 
@@ -953,6 +1070,14 @@ generic_types:
         unsupported: true
         fallback: "VARCHAR(MAX)"
         fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      fabric_lakehouse:
+        type: "STRING"
+        aliases: ["JSONB", "JSON"]
+        notes: "Spark SQL has no native JSON column type. Store as STRING and use from_json()/to_json() functions."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
       synapse:
         type: "NVARCHAR(MAX)"
         notes: "Synapse stores JSON as NVARCHAR(MAX) with JSON functions."
@@ -1000,6 +1125,13 @@ generic_types:
         confidence: verified
         unsupported: true
         fallback: "VARCHAR(MAX)"
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no VARIANT type. Store as STRING and use from_json()/to_json() for semi-structured data."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
       synapse:
         type: "NVARCHAR(MAX)"
         notes: "No native VARIANT; use NVARCHAR(MAX)."
@@ -1056,6 +1188,11 @@ generic_types:
         unsupported: true
         fallback: "VARCHAR(MAX)"
         fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      fabric_lakehouse:
+        type: "ARRAY"
+        notes: "Spark SQL ARRAY<elementType> with typed elements."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "NVARCHAR(MAX)"
         notes: "No ARRAY type. Store as JSON array in NVARCHAR(MAX)."
@@ -1108,6 +1245,11 @@ generic_types:
         confidence: verified
         unsupported: true
         fallback: "VARCHAR(MAX)"
+      fabric_lakehouse:
+        type: "STRUCT"
+        notes: "Spark SQL STRUCT<fieldName: fieldType [NOT NULL], ...> with typed named fields."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
       synapse:
         type: "NVARCHAR(MAX)"
         notes: "No STRUCT type. Store as JSON in NVARCHAR(MAX)."
@@ -1160,6 +1302,13 @@ generic_types:
         notes: "Fabric DW supports UNIQUEIDENTIFIER but stores as binary in Parquet."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no UUID type. Store as STRING and generate with uuid() function."
+        doc_url: "https://spark.apache.org/docs/latest/api/sql/#uuid"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
       synapse:
         type: "UNIQUEIDENTIFIER"
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/uniqueidentifier-transact-sql"
@@ -1205,6 +1354,13 @@ generic_types:
         unsupported: true
         fallback: "VARBINARY"
         fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+      fabric_lakehouse:
+        type: "BINARY"
+        notes: "Spark SQL has no native GEOGRAPHY type. Store as BINARY (WKB) or STRING (WKT). Consider using Apache Sedona for spatial operations."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "BINARY"
       synapse:
         type: "VARBINARY"
         notes: "Synapse dedicated pool does not support geography; use varbinary. See: https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
@@ -1250,6 +1406,13 @@ generic_types:
         confidence: verified
         unsupported: true
         fallback: "VARBINARY"
+      fabric_lakehouse:
+        type: "BINARY"
+        notes: "Spark SQL has no native GEOMETRY type. Store as BINARY (WKB) or STRING (WKT). Consider using Apache Sedona for spatial operations."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "BINARY"
       synapse:
         type: "VARBINARY"
         notes: "Synapse dedicated pool does not support geometry; use varbinary."
@@ -1259,6 +1422,366 @@ generic_types:
         fallback: "VARBINARY"
       oracle:
         type: "SDO_GEOMETRY"
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Time with Timezone ───────────────────────────────────────────────────
+
+  TIME_TZ:
+    description: "Time of day with timezone offset — TIMETZ"
+    dialects:
+      redshift:
+        type: "TIMETZ"
+        aliases: ["TIME WITH TIME ZONE"]
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "TIME"
+        notes: "Snowflake TIME has no timezone variant; use TIMESTAMP_TZ and extract time."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+        unsupported: true
+        fallback: "TIME"
+      bigquery:
+        type: "TIME"
+        notes: "BigQuery TIME has no timezone variant."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#time_type"
+        confidence: verified
+        unsupported: true
+        fallback: "TIME"
+      databricks:
+        type: "STRING"
+        notes: "Databricks has no TIMETZ type; store as STRING 'HH:MM:SS+TZ'."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      sqlserver:
+        type: "DATETIMEOFFSET"
+        notes: "SQL Server has no standalone TIMETZ; DATETIMEOFFSET includes date+time+offset."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "DATETIME2"
+        max_precision: 6
+        default_precision: 6
+        notes: "Fabric DW has no TIMETZ/DATETIMEOFFSET; falls back to DATETIME2."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "DATETIME2"
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no TIMETZ type. Store as STRING 'HH:MM:SS+TZ'."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      synapse:
+        type: "DATETIMEOFFSET"
+        notes: "Synapse uses DATETIMEOFFSET for timezone-aware time."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql"
+        confidence: verified
+      oracle:
+        type: "TIMESTAMP WITH TIME ZONE"
+        notes: "Oracle has no standalone TIME WITH TIMEZONE; use TIMESTAMP WITH TIME ZONE."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Intervals ────────────────────────────────────────────────────────────
+
+  INTERVAL_YM:
+    description: "Interval of years and months — INTERVAL YEAR TO MONTH"
+    dialects:
+      redshift:
+        type: "INTERVAL YEAR TO MONTH"
+        aliases: []
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "VARCHAR"
+        notes: "Snowflake has no INTERVAL type for table columns. Store as VARCHAR or compute inline."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR"
+      bigquery:
+        type: "INTERVAL"
+        notes: "BigQuery INTERVAL covers both year-month and day-second components."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types"
+        confidence: verified
+      databricks:
+        type: "INTERVAL YEAR TO MONTH"
+        aliases: []
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "INT"
+        notes: "SQL Server has no INTERVAL type. Store month count as INT and compute dates with DATEADD."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql"
+        confidence: verified
+        unsupported: true
+        fallback: "INT"
+      fabric_dw:
+        type: "INT"
+        notes: "Fabric DW has no INTERVAL type. Store month count as INT."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "INT"
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no INTERVAL column type for tables. Store as STRING (e.g. 'P1Y2M') or INT (months)."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      synapse:
+        type: "INT"
+        notes: "Synapse has no INTERVAL type. Store month count as INT."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "INT"
+      oracle:
+        type: "INTERVAL YEAR TO MONTH"
+        aliases: []
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  INTERVAL_DS:
+    description: "Interval of days, hours, minutes, seconds — INTERVAL DAY TO SECOND"
+    dialects:
+      redshift:
+        type: "INTERVAL DAY TO SECOND"
+        aliases: []
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Datetime_types.html"
+        confidence: verified
+      snowflake:
+        type: "VARCHAR"
+        notes: "Snowflake has no INTERVAL type for table columns. Store as VARCHAR or compute inline."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-datetime"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR"
+      bigquery:
+        type: "INTERVAL"
+        notes: "BigQuery INTERVAL covers both year-month and day-second components."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types"
+        confidence: verified
+      databricks:
+        type: "INTERVAL DAY TO SECOND"
+        aliases: []
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "BIGINT"
+        notes: "SQL Server has no INTERVAL type. Store as BIGINT (total seconds or milliseconds) and compute with DATEADD."
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql"
+        confidence: verified
+        unsupported: true
+        fallback: "BIGINT"
+      fabric_dw:
+        type: "BIGINT"
+        notes: "Fabric DW has no INTERVAL type. Store as BIGINT (total seconds)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "BIGINT"
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no INTERVAL column type for tables. Store as STRING (ISO 8601 duration) or BIGINT (total seconds)."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      synapse:
+        type: "BIGINT"
+        notes: "Synapse has no INTERVAL type. Store as BIGINT (total seconds)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "BIGINT"
+      oracle:
+        type: "INTERVAL DAY TO SECOND"
+        aliases: []
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── Fixed-length Binary ──────────────────────────────────────────────────
+
+  BINARY:
+    description: "Fixed-length binary data — BINARY(n)"
+    dialects:
+      redshift:
+        type: "VARBYTE"
+        notes: "Redshift has no fixed-length binary; VARBYTE is variable-length."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_VARBYTE_type.html"
+        confidence: verified
+      snowflake:
+        type: "BINARY"
+        aliases: []
+        max_length: 8388608
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-text"
+        confidence: verified
+      bigquery:
+        type: "BYTES"
+        notes: "BigQuery BYTES is variable-length; no fixed-length binary type."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#bytes_type"
+        confidence: verified
+      databricks:
+        type: "BINARY"
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "BINARY"
+        max_length: 8000
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARBINARY"
+        notes: "Fabric DW has no fixed-length BINARY; use VARBINARY."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARBINARY"
+      fabric_lakehouse:
+        type: "BINARY"
+        notes: "Spark SQL BINARY is variable-length binary data."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+      synapse:
+        type: "BINARY"
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/binary-and-varbinary-transact-sql"
+        confidence: verified
+      oracle:
+        type: "RAW"
+        max_length: 2000
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── XML ──────────────────────────────────────────────────────────────────
+
+  XML:
+    description: "XML document / fragment type"
+    dialects:
+      redshift:
+        type: "VARCHAR(65535)"
+        notes: "Redshift has no XML type. Store as VARCHAR."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(65535)"
+      snowflake:
+        type: "VARIANT"
+        notes: "Snowflake VARIANT can hold XML content parsed via PARSE_XML()."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "STRING"
+        notes: "BigQuery has no XML type; store as STRING."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      databricks:
+        type: "STRING"
+        notes: "Databricks has no XML type; store as STRING."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      sqlserver:
+        type: "XML"
+        aliases: []
+        doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/xml/xml-transact-sql"
+        confidence: verified
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "Fabric DW does not support XML type. Use VARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+      fabric_lakehouse:
+        type: "STRING"
+        notes: "Spark SQL has no XML type. Store as STRING and use xpath()/from_xml() functions."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+        unsupported: true
+        fallback: "STRING"
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "Synapse dedicated pool does not support XML type; use NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      oracle:
+        type: "XMLTYPE"
+        aliases: []
+        notes: "Oracle XMLTYPE stores XML documents with XQuery/XPath support."
+        doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
+        confidence: verified
+
+  # ── MAP ──────────────────────────────────────────────────────────────────
+
+  MAP:
+    description: "Key-value map type — MAP<K,V>"
+    dialects:
+      redshift:
+        type: "SUPER"
+        notes: "Redshift SUPER can hold maps via PartiQL."
+        doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_SUPER_type.html"
+        confidence: verified
+        unsupported: true
+        fallback: "SUPER"
+      snowflake:
+        type: "MAP"
+        notes: "Snowflake MAP structured type."
+        doc_url: "https://docs.snowflake.com/en/sql-reference/data-types-semistructured"
+        confidence: verified
+      bigquery:
+        type: "JSON"
+        notes: "BigQuery has no MAP type; use JSON or STRUCT<key, value> ARRAY."
+        doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#json_type"
+        confidence: verified
+        unsupported: true
+        fallback: "JSON"
+      databricks:
+        type: "MAP"
+        notes: "Databricks MAP<keyType, valueType>."
+        doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
+        confidence: verified
+      sqlserver:
+        type: "NVARCHAR(MAX)"
+        notes: "No MAP type. Store as JSON in NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/sql/relational-databases/json/json-data-sql-server"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      fabric_dw:
+        type: "VARCHAR(MAX)"
+        notes: "No MAP type. Store as JSON in VARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "VARCHAR(MAX)"
+      fabric_lakehouse:
+        type: "MAP"
+        notes: "Spark SQL MAP<keyType, valueType> with typed key-value pairs."
+        doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
+        confidence: verified
+      synapse:
+        type: "NVARCHAR(MAX)"
+        notes: "No MAP type. Store as JSON in NVARCHAR(MAX)."
+        doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
+        confidence: verified
+        unsupported: true
+        fallback: "NVARCHAR(MAX)"
+      oracle:
+        type: "JSON"
+        notes: "Oracle 21c JSON supports map-like structures. For older: use CLOB."
         doc_url: "https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html"
         confidence: verified
 
@@ -1305,10 +1828,12 @@ identity_mechanisms:
     confidence: verified
 
   fabric_dw:
-    syntax: "column_name type IDENTITY(seed, increment)"
-    example: "id INT IDENTITY(1,1)"
-    notes: "Fabric DW supports IDENTITY columns for INT, BIGINT, SMALLINT, DECIMAL, NUMERIC."
-    doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/create-table"
+    syntax: null
+    notes: "Fabric DW does NOT support IDENTITY columns in CREATE TABLE DDL. IDENTITY is not part of the Fabric DW T-SQL surface area (verified June 2026). Use surrogate keys generated in your ELT pipeline, ROW_NUMBER() in a CTAS, or generate keys in a Fabric Data Pipeline / Notebook."
+    fallback_type: "BIGINT -- generate surrogate key in pipeline"
+    fallback_doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/tables"
+    unsupported: true
+    doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/tables"
     confidence: verified
 
   synapse:

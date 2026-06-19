@@ -1,4 +1,4 @@
-CREATE TABLE `analytics`.`orders` (
+CREATE OR REPLACE TABLE `analytics`.`orders` (
   `order_id` INT64 NOT NULL,
   `customer_id` INT64 NOT NULL,
   `amount` NUMERIC(18,2) NOT NULL,

@@ -35,8 +35,14 @@ _BEGIN_END     = re.compile(r'\bBEGIN\b.*?\bEND\b\s*;', re.DOTALL | re.IGNORECAS
 _RETURN_CLAUSE = re.compile(r'\bRETURN\b[^;]+;', re.DOTALL | re.IGNORECASE)
 # BigQuery / SQL functions wrapped in  AS (\n   ...\n);
 _AS_PAREN_BODY = re.compile(r'\bAS\s*\(\n[\s\S]*?\n\s*\)\s*;', re.MULTILINE)
+# Block comments /* ... */ — strip to avoid false positives when sqlglot preserves
+# source SQL comments (e.g. "/* NVL / NVL2 */") in the generated view body.
+_BLOCK_COMMENTS = re.compile(r'/\*.*?\*/', re.DOTALL)
 # JavaScript / raw triple-quote strings  r"""..."""
 _JS_TRIPLE     = re.compile(r'r""".*?"""', re.DOTALL)
+# SQL line comments (-- ...) — strip to avoid false positives from commented-out
+# source code (e.g. Oracle procedure bodies emitted as comment lines in Spark/Databricks)
+_LINE_COMMENTS = re.compile(r'--[^\n]*')
 
 
 def _strip_procedure_bodies(sql: str) -> str:
@@ -50,6 +56,8 @@ def _strip_procedure_bodies(sql: str) -> str:
       3. AS (\\n...\\n);  — BigQuery SQL UDF format
       4. r\"\"\"...\"\"\"  — BigQuery JavaScript UDF
       5. RETURN expr;     — short Oracle/SQL function bodies
+      6. -- line comments — strip to avoid false positives from commented-out
+                           source code (e.g. Oracle bodies in Spark/Databricks generators)
     """
     # 1. Dollar-quoted blocks: $$ ... $$
     sql = _DOLLAR_QUOTE.sub(' ', sql)
@@ -62,6 +70,14 @@ def _strip_procedure_bodies(sql: str) -> str:
     sql = _JS_TRIPLE.sub(' ', sql)
     # 5. PL/SQL short RETURN expr; (Oracle inline functions)
     sql = _RETURN_CLAUSE.sub(' ', sql)
+    # 6. Strip block comments (/* ... */) to avoid false positives when sqlglot
+    #    preserves source SQL comments (e.g. "/* NVL / NVL2 */", "/* :: */")
+    #    in the generated view body.  Run before line-comment stripping so
+    #    the regex doesn't see partial block-comment text after line breaks.
+    sql = _BLOCK_COMMENTS.sub(' ', sql)
+    # 7. Strip line comments (-- ...) to avoid false positives from source code
+    #    preserved as SQL comments in the output (e.g. procedure fallbacks)
+    sql = _LINE_COMMENTS.sub(' ', sql)
     return sql
 
 
@@ -81,12 +97,13 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
         ("RESIDUAL_DISTSTYLE",  re.compile(r'\bDISTSTYLE\b',  re.I),
          "DISTSTYLE not converted",               set()),
         ("RESIDUAL_PG_CAST",    re.compile(r'::\s*\w+'),
-         "PostgreSQL :: cast not converted",       set()),
+         "PostgreSQL :: cast not converted",
+         # Snowflake natively supports :: cast syntax — do not flag as residual
+         {"snowflake"}),
         ("RESIDUAL_NVL",        re.compile(r'\bNVL\s*\(',     re.I),
          "NVL() not converted",
-         # NVL is valid in Redshift (self) and Oracle — but Redshift body
-         # stripping handles the proc-body case; only flag for non-Oracle targets
-         {"oracle", "redshift"}),
+         # NVL is also valid in Oracle, Snowflake, Databricks, and Fabric Lakehouse (Spark coalesces it)
+         {"oracle", "redshift", "snowflake", "databricks", "fabric_lakehouse"}),
         ("RESIDUAL_ILIKE",      re.compile(r'\bILIKE\b',      re.I),
          "ILIKE not converted",
          # ILIKE is also valid in Snowflake
@@ -95,6 +112,15 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
          "SUPER type not converted",              set()),
         ("RESIDUAL_ENCODE",     re.compile(r'\bENCODE\s+\w+', re.I),
          "ENCODE compression not converted",      set()),
+        ("RESIDUAL_INITCAP",    re.compile(r'\bINITCAP\s*\(', re.I),
+         "INITCAP() not converted — no T-SQL equivalent",
+         # INITCAP is natively supported everywhere except the T-SQL family
+         {"redshift", "oracle", "snowflake", "bigquery", "databricks", "fabric_lakehouse"}),
+        ("RESIDUAL_CONVERT_TIMEZONE", re.compile(r'\bCONVERT_TIMEZONE\s*\(', re.I),
+         "CONVERT_TIMEZONE() not converted",
+         # Redshift and Snowflake have a native CONVERT_TIMEZONE function.
+         # Databricks and Fabric Lakehouse convert it to from_utc_timestamp().
+         {"redshift", "snowflake", "databricks", "fabric_lakehouse"}),
     ],
     "snowflake": [
         ("RESIDUAL_VARIANT",    re.compile(r'\bVARIANT\b',    re.I),
@@ -107,8 +133,8 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
          "QUALIFY clause not converted",          set()),
         ("RESIDUAL_CLUSTER_BY", re.compile(r'\bCLUSTER\s+BY\b', re.I),
          "CLUSTER BY not converted",
-         # CLUSTER BY is valid in Fabric DW, BigQuery, and Databricks
-         {"fabric_dw", "bigquery", "databricks", "snowflake"}),
+         # CLUSTER BY is valid in Fabric DW, BigQuery, Databricks, and Fabric Lakehouse (warned but emitted)
+         {"fabric_dw", "bigquery", "databricks", "snowflake", "fabric_lakehouse"}),
         ("RESIDUAL_SEQUENCE",   re.compile(r'\.NEXTVAL\b',    re.I),
          ".NEXTVAL sequence not converted",       set()),
     ],
@@ -145,8 +171,8 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
          "NOLOCK hint not converted",             set()),
         ("RESIDUAL_GETDATE",    re.compile(r'\bGETDATE\s*\(\)', re.I),
          "GETDATE() not converted",
-         # GETDATE() is also valid in Synapse and Fabric DW (T-SQL family)
-         {"sqlserver", "synapse", "fabric_dw"}),
+         # GETDATE() is also valid in Synapse, Fabric DW (T-SQL family), and Redshift
+         {"sqlserver", "synapse", "fabric_dw", "redshift"}),
         ("RESIDUAL_ISNULL_TSQL",re.compile(r'\bISNULL\s*\(',  re.I),
          "ISNULL() not converted",
          # ISNULL is valid in SQL Server, Synapse, Fabric DW (T-SQL family)
@@ -176,11 +202,15 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
     ],
     "databricks": [
         ("RESIDUAL_DELTA",       re.compile(r'\bUSING\s+DELTA\b',   re.I),
-         "USING DELTA not converted",             {"databricks"}),
+         "USING DELTA not converted",
+         # USING DELTA is also valid in Fabric Lakehouse (Delta Lake tables)
+         {"databricks", "fabric_lakehouse"}),
         ("RESIDUAL_TBLPROPS",    re.compile(r'\bTBLPROPERTIES\b',   re.I),
          "TBLPROPERTIES not converted",           {"databricks"}),
         ("RESIDUAL_PARTITIONED", re.compile(r'\bPARTITIONED\s+BY\b',re.I),
-         "PARTITIONED BY not converted",          {"databricks"}),
+         "PARTITIONED BY not converted",
+         # PARTITIONED BY is also valid in Fabric Lakehouse Spark SQL
+         {"databricks", "fabric_lakehouse"}),
         ("RESIDUAL_LIQUID",      re.compile(r'\bCLUSTER\s+BY\b',    re.I),
          "CLUSTER BY (liquid) not converted",
          # CLUSTER BY is valid in Fabric DW, BigQuery, Snowflake

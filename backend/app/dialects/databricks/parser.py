@@ -97,6 +97,8 @@ class DatabricksParser(DialectParser):
         db = (tbl.catalog if tbl else None) or None
 
         is_temp = bool(node.args.get("temporary"))
+        or_replace = bool(node.args.get("replace"))
+        if_not_exists = bool(node.args.get("exists"))
         is_external = "EXTERNAL" in raw_sql.upper()
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
@@ -119,6 +121,7 @@ class DatabricksParser(DialectParser):
             unique_constraints=uniques, check_constraints=checks,
             cluster_by=cluster_by, partition_by=partition_by,
             is_temporary=is_temp, is_external=is_external, comment=comment,
+            or_replace=or_replace, if_not_exists=if_not_exists,
         ), warnings, doc_refs
 
     def _parse_column_def(self, col_def: exp.ColumnDef) -> Tuple[IRColumn, List[IRWarning], List[IRDocReference]]:

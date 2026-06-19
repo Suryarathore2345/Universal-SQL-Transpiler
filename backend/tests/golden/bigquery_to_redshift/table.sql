@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS analytics.orders;
 CREATE TABLE analytics.orders (
     "order_id" INT2 NOT NULL,
     "customer_id" INT2 NOT NULL,

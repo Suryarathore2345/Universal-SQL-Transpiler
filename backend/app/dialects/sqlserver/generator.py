@@ -88,7 +88,16 @@ class SQLServerGenerator(DialectGenerator):
             lines.append(f"    {uq_name}UNIQUE ({uq_cols})")
 
         body = ",\n".join(lines)
-        sql = f"CREATE TABLE {qname} (\n{body}\n);"
+        core_sql = f"CREATE TABLE {qname} (\n{body}\n);"
+        if table.or_replace:
+            sql = f"DROP TABLE IF EXISTS {qname};\nGO\n{core_sql}"
+        elif table.if_not_exists:
+            sql = (
+                f"IF OBJECT_ID(N'{qname}', N'U') IS NULL\nBEGIN\n"
+                f"    {core_sql.replace(chr(10), chr(10) + '    ')}\nEND;"
+            )
+        else:
+            sql = core_sql
 
         # Distribution concepts have no equivalent in SQL Server
         if table.distribution:
@@ -232,14 +241,9 @@ class SQLServerGenerator(DialectGenerator):
         )]
         or_replace = "OR ALTER " if view.or_replace else ""
         qname = self._qualified_name(view)
-        # Convert Oracle/BigQuery source-dialect functions to T-SQL equivalents
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)   # `id` → "id"
-        defn = self._convert_nvl2_to_case(defn)           # NVL2 → CASE WHEN
-        defn = self._convert_nvl_aware(defn)               # NVL → ISNULL
-        defn = self._convert_decode_to_case(defn)          # DECODE → CASE
+        defn, warnings = self._apply_tsql_view_conversions(view.definition)
         sql = f"CREATE {or_replace}VIEW {qname} AS\n{defn};"
-        return sql, [], doc_refs
+        return sql, warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW  →  Indexed View (documented SQL Server pattern)
@@ -268,19 +272,22 @@ class SQLServerGenerator(DialectGenerator):
         schema = self._quote_identifier(mv.schema_name) if mv.schema_name else "dbo"
         idx_name = self._quote_identifier(f"IX_{mv.name}_clustered")
 
+        defn, conv_warnings = self._apply_tsql_view_conversions(mv.definition)
+
         sql = (
             f"-- SQL Server does not support CREATE MATERIALIZED VIEW.\n"
             f"-- Documented equivalent: indexed view with SCHEMABINDING.\n"
             f"-- Docs: https://learn.microsoft.com/en-us/sql/relational-databases/views/create-indexed-views\n"
             f"CREATE VIEW {qname} WITH SCHEMABINDING AS\n"
-            f"{mv.definition};\n"
+            f"{defn};\n"
             f"GO\n"
             f"-- Create unique clustered index to materialize the view\n"
             f"CREATE UNIQUE CLUSTERED INDEX {idx_name}\n"
             f"    ON {schema}.{view_name} (<unique_key_column>);"
         )
 
-        warnings = [IRWarning(
+        warnings = list(conv_warnings)
+        warnings += [IRWarning(
             feature="MV_NOT_SUPPORTED_SQLSERVER",
             message="SQL Server does not support CREATE MATERIALIZED VIEW natively. "
                     "Converted to an indexed view (CREATE VIEW WITH SCHEMABINDING + "

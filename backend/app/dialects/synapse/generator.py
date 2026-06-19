@@ -82,7 +82,16 @@ class SynapseGenerator(DialectGenerator):
             lines.append(f"    {uq_name}UNIQUE NONCLUSTERED ({uq_cols}) NOT ENFORCED")
 
         body = ",\n".join(lines)
-        sql = f"CREATE TABLE {qname} (\n{body}\n)"
+        core_sql = f"CREATE TABLE {qname} (\n{body}\n)"
+        if table.or_replace:
+            sql = f"DROP TABLE IF EXISTS {qname};\n{core_sql}"
+        elif table.if_not_exists:
+            sql = (
+                f"IF OBJECT_ID(N'{qname}', N'U') IS NULL\nBEGIN\n"
+                f"    {core_sql.replace(chr(10), chr(10) + '    ')}\nEND;"
+            )
+        else:
+            sql = core_sql
 
         # WITH clause: distribution + index + partition
         with_clauses = []
@@ -192,12 +201,8 @@ class SynapseGenerator(DialectGenerator):
         doc_refs = [IRDocReference(title="Synapse CREATE VIEW", url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql", platform="synapse", purpose="View generation")]
         or_replace = "OR ALTER " if view.or_replace else ""
         qname = self._qualified_name(view)
-        defn = view.definition
-        defn = self._convert_backtick_identifiers(defn)
-        defn = self._convert_nvl2_to_case(defn)
-        defn = self._convert_nvl_aware(defn)        # NVL → ISNULL
-        defn = self._convert_decode_to_case(defn)
-        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", [], doc_refs
+        defn, warnings = self._apply_tsql_view_conversions(view.definition)
+        return f"CREATE {or_replace}VIEW {qname} AS\n{defn};", warnings, doc_refs
 
     # -------------------------------------------------------------------------
     # CREATE MATERIALIZED VIEW
@@ -232,7 +237,10 @@ class SynapseGenerator(DialectGenerator):
             elif d.style == DistributionStyle.REPLICATE:
                 dist_clause = "DISTRIBUTION = REPLICATE"
 
-        sql = f"CREATE MATERIALIZED VIEW {qname}\nWITH ({dist_clause})\nAS\n{mv.definition};"
+        defn, conv_warnings = self._apply_tsql_view_conversions(mv.definition)
+        warnings.extend(conv_warnings)
+
+        sql = f"CREATE MATERIALIZED VIEW {qname}\nWITH ({dist_clause})\nAS\n{defn};"
 
         warnings.append(IRWarning(
             feature="SYNAPSE_MV_AUTO_REFRESH",

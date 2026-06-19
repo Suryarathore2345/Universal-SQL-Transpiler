@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS [analytics].[orders];
+GO
 CREATE TABLE [analytics].[orders] (
     [order_id] BIGINT NOT NULL,
     [customer_id] INT NOT NULL,
