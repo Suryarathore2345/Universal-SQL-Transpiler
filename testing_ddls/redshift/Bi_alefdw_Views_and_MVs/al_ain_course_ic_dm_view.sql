@@ -1,0 +1,81 @@
+CREATE OR REPLACE VIEW bi_alefdw_dev.al_ain_course_ic_dm_view AS
+SELECT
+    activity_dw_id,
+    course_id,
+    course_name,
+    class_dw_id,
+    class_gen_subject,
+    grade_name::VARCHAR AS grade_name,
+    school_dw_id,
+    school_name,
+    school_city_name,
+    school_country_name,
+    tenant_name,
+    school_organisation,
+    week_start_date,
+    week_end_date,
+    term_start_date,
+    term_end_date,
+    pacing,
+    academic_year_start_date,
+    academic_year_end_date,
+    academic_year,
+    section_dw_id,
+    section_name,
+    class_total_students,
+    total_completed_students,
+    total_inprogress_students,
+    meets_completed_students,
+    approaching_completed_students,
+    below_completed_students,
+    session_time,
+    avg_score,
+    total_students_fact,
+    total_completed_students_score as total_score,
+    fle_score,
+    1 AS core_ic_flag
+FROM bi_alefdw.core_course_classlearning_agg_view
+WHERE upper(school_city_name) = 'AL AIN'
+  AND date_part('year', academic_year_start_date) >= 2024
+
+UNION ALL
+
+SELECT
+    activity_dw_id,
+    course_id,
+    course_name,
+    class_dw_id,
+    class_gen_subject,
+    CAST(grade_name AS VARCHAR) AS grade_name,
+    school_dw_id,
+    school_name,
+    school_city_name,
+    school_country_name,
+    tenant_name,
+    school_organisation,
+    week_start_date,
+    week_end_date,
+    term_start_date,
+    term_end_date,
+    pacing,
+    academic_year_start_date,
+    academic_year_end_date,
+    academic_year,
+    section_dw_id,
+    section_name,
+    class_total_students,
+    total_completed_students,
+    total_inprogress_students,
+    meets_completed_students,
+    approaching_completed_students,
+    below_completed_students,
+    session_time,
+    avg_score,
+    total_students_fact,
+    999::BIGINT AS total_score,
+    fle_score,
+    2 AS core_ic_flag
+FROM bi_alefdw.core_course_ic_classlearning_agg_view
+WHERE upper(school_city_name) = 'AL AIN'
+  AND date_part('year', academic_year_start_date) >= 2024
+WITH NO SCHEMA BINDING;

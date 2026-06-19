@@ -1,0 +1,43 @@
+CREATE
+OR REPLACE VIEW bi_alefdw.principal_activity_py_view as
+Select distinct login_date_dw_id,
+                principal_dw_id,
+                tenant_dw_id,
+                school_dw_id,
+                outside_school_flag,
+                min(local_login_time)                                           as login_local_date_time,
+                convert_timezone(tenant_timezone, 'UTC', min(local_login_time)) as login_date_time
+from (
+         select distinct ful.ful_date_dw_id                                                          as login_date_dw_id,
+                         ful.ful_user_dw_id                                                          as principal_dw_id,
+                         ful.ful_tenant_dw_id                                                        as tenant_dw_id,
+                         ful.ful_school_dw_id                                                        as school_dw_id,
+                         ful.ful_outside_of_school                                                   as outside_school_flag,
+                         trunc(min(
+                                 convert_timezone('UTC', dt.tenant_timezone, ful.ful_created_time))) as local_login_date,
+                         min(
+                                 convert_timezone('UTC', dt.tenant_timezone, ful.ful_created_time))  as local_login_time,
+                         dt.tenant_timezone
+         from alefdw.fact_user_login ful
+                  join alefdw.dim_school ds
+                       on ful.ful_school_dw_id = ds.school_dw_id
+                  join alefdw.dim_tenant dt
+                       on ds.school_tenant_id = dt.tenant_id
+                           and dt.tenant_dw_id = ful.ful_tenant_dw_id
+         where ful.ful_role_dw_id = 6
+         group by ful.ful_date_dw_id,
+                  ful.ful_user_dw_id,
+                  ful.ful_tenant_dw_id,
+                  ful.ful_school_dw_id,
+                  ful.ful_outside_of_school,
+                  ds.school_timezone,
+                  dt.tenant_timezone,
+                  trunc(convert_timezone('UTC', dt.tenant_timezone, ful.ful_created_time))
+     )
+group by login_date_dw_id,
+         principal_dw_id,
+         tenant_dw_id,
+         school_dw_id,
+         outside_school_flag,
+         local_login_date,
+         tenant_timezone WITH NO SCHEMA BINDING;

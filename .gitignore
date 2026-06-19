@@ -29,3 +29,7 @@ Thumbs.db
 
 # Claude Code internal
 .claude/launch.json
+
+# QA runner generated output
+testing_ddls/qa_report*.html
+testing_ddls/qa_output.txt
