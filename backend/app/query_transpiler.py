@@ -17,6 +17,7 @@ import sqlglot
 from sqlglot import errors as sqlglot_errors
 
 from app.ir.models import IRDocReference, IRWarning, ObjectType, Warningseverity
+from app.sql_text_utils import split_statements as _split_statements
 
 # ---------------------------------------------------------------------------
 # Dialect mapping: our dialect keys → sqlglot read/write names
@@ -77,46 +78,11 @@ def is_query_statement(sql: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Statement splitter (respects single-quoted strings, avoids false `;` splits)
-# ---------------------------------------------------------------------------
-
-def _split_statements(sql: str) -> list[str]:
-    """Split sql on `;` boundaries, ignoring semicolons inside string literals."""
-    statements: list[str] = []
-    current: list[str] = []
-    in_single = False
-    in_double = False
-    i = 0
-    n = len(sql)
-
-    while i < n:
-        ch = sql[i]
-        # Toggle string delimiters
-        if ch == "'" and not in_double:
-            # Escaped quote ('')
-            if in_single and i + 1 < n and sql[i + 1] == "'":
-                current.append("''")
-                i += 2
-                continue
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-
-        if ch == ';' and not in_single and not in_double:
-            stmt = ''.join(current).strip()
-            if stmt:
-                statements.append(stmt)
-            current = []
-        else:
-            current.append(ch)
-        i += 1
-
-    last = ''.join(current).strip()
-    if last:
-        statements.append(last)
-    return statements
-
-
+# Statement splitter — imported from app.sql_text_utils (see import above).
+# Both this module's SELECT/DML path and dialects/base.py's DDL path use the
+# same comment- and dollar-quote-aware implementation; a semicolon inside a
+# `--`/`/* */` comment here used to be misread as a real statement
+# terminator by a weaker, independently-maintained copy of this function.
 # ---------------------------------------------------------------------------
 # Per-dialect post-processing rules applied AFTER sqlglot transpilation
 # ---------------------------------------------------------------------------

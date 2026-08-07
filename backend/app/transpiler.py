@@ -17,7 +17,8 @@ from app.ir.models import (
     TranspileResult, Warningseverity,
 )
 from app.validator import validate_residuals, compute_confidence
-from app.query_transpiler import detect_statement_type, transpile_script, transpile_query, _split_statements
+from app.query_transpiler import detect_statement_type, transpile_script, transpile_query
+from app.sql_text_utils import split_statements as _split_statements
 
 
 # ---------------------------------------------------------------------------

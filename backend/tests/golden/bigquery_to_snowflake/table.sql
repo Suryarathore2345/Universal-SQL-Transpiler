@@ -1,6 +1,6 @@
-CREATE OR REPLACE TABLE analytics.orders (
-    "order_id" TINYINT NOT NULL,
-    "customer_id" TINYINT NOT NULL,
+CREATE OR REPLACE TABLE "analytics"."orders" (
+    "order_id" BIGINT NOT NULL,
+    "customer_id" BIGINT NOT NULL,
     "amount" NUMBER(18,2) NOT NULL,
     "status" CHAR DEFAULT 'pending',
     "created_at" TIMESTAMP_TZ NOT NULL

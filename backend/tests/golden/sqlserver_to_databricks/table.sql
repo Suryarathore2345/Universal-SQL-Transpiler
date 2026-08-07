@@ -4,6 +4,6 @@ CREATE TABLE `dbo`.`orders` (
     `amount` DECIMAL(18,2) NOT NULL,
     `status` STRING(32) DEFAULT 'pending',
     `created_at` TIMESTAMP_NTZ NOT NULL,
-    PRIMARY KEY (`order_id`)
+    PRIMARY KEY (`order_id`) NOT ENFORCED
 )
 USING DELTA;

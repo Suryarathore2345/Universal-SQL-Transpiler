@@ -104,14 +104,39 @@ class BigQueryParser(DialectParser):
         if_not_exists = bool(node.args.get("exists"))
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
+        inline_pk_cols: List[str] = []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
             for expr in schema_expr.expressions:
                 if isinstance(expr, exp.ColumnDef):
                     col, w, d = self._parse_column_def(expr)
                     columns.append(col); warnings.extend(w); doc_refs.extend(d)
+                    # Inline column-level PRIMARY KEY (e.g. `id INT64 PRIMARY
+                    # KEY NOT ENFORCED`) is a separate constraint kind from
+                    # the table-level `PRIMARY KEY (col, ...)` clause handled
+                    # below — without this check it was silently dropped.
+                    if any(
+                        isinstance(c.kind if hasattr(c, "kind") else c, exp.PrimaryKeyColumnConstraint)
+                        for c in expr.constraints
+                    ):
+                        inline_pk_cols.append(col.name)
                 elif isinstance(expr, exp.PrimaryKey):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
+                elif isinstance(expr, exp.ForeignKey):
+                    ref = expr.args.get("reference")
+                    fks.append(IRForeignKey(
+                        columns=[c.name for c in expr.expressions],
+                        ref_table=getattr(ref.this, "name", None) or "unknown" if ref and ref.this else "unknown",
+                        ref_schema=getattr(ref.this, "db", None) if ref and ref.this else None,
+                        ref_columns=[c.name for c in ref.expressions] if ref else [],
+                    ))
+                elif isinstance(expr, exp.UniqueColumnConstraint):
+                    uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
+                elif isinstance(expr, exp.Check):
+                    checks.append(IRCheckConstraint(expression=expr.this.sql() if expr.this else ""))
+
+        if pk is None and inline_pk_cols:
+            pk = IRPrimaryKey(columns=inline_pk_cols)
 
         cluster_by = self._extract_cluster_by(raw_sql)
         partition_by = self._extract_partition(raw_sql)

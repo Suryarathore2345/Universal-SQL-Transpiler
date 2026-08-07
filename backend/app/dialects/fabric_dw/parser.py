@@ -114,12 +114,22 @@ class FabricDWParser(DialectParser):
         if_not_exists = bool(node.args.get("exists"))
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
+        inline_pk_cols: List[str] = []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
             for expr in schema_expr.expressions:
                 if isinstance(expr, exp.ColumnDef):
                     col, w, d = self._parse_column_def(expr)
                     columns.append(col); warnings.extend(w); doc_refs.extend(d)
+                    # Inline column-level PRIMARY KEY (e.g. `id INT PRIMARY
+                    # KEY`) is a separate constraint kind from the
+                    # table-level `PRIMARY KEY (col, ...)` clause handled
+                    # below — without this check it was silently dropped.
+                    if any(
+                        isinstance(c.kind if hasattr(c, "kind") else c, exp.PrimaryKeyColumnConstraint)
+                        for c in expr.constraints
+                    ):
+                        inline_pk_cols.append(col.name)
                 elif isinstance(expr, exp.PrimaryKey):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
                 elif isinstance(expr, exp.ForeignKey):
@@ -133,6 +143,9 @@ class FabricDWParser(DialectParser):
                     ))
                 elif isinstance(expr, exp.UniqueColumnConstraint):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
+
+        if pk is None and inline_pk_cols:
+            pk = IRPrimaryKey(columns=inline_pk_cols)
 
         cluster_by = self._extract_cluster_by(raw_sql)
         return IRTable(name=name, schema_name=schema, database_name=db, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, cluster_by=cluster_by, or_replace=or_replace, if_not_exists=if_not_exists), warnings, doc_refs

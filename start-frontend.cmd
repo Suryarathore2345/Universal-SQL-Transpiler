@@ -1,4 +1,3 @@
 @echo off
-cd /d "%~dp0universal-sql-transpiler\frontend"
-set PATH=C:\Users\SuryadevRathore\node;%PATH%
+cd /d "%~dp0frontend"
 npm run dev

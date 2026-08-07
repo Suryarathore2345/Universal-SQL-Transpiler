@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE hr.upsert_order(p_order_id VARCHAR(MAX), p_amount VARCHAR(MAX))
+CREATE OR REPLACE PROCEDURE "hr"."upsert_order"(p_order_id VARCHAR(MAX), p_amount VARCHAR(MAX))
 RETURNS VARIANT
 LANGUAGE SQL
 AS

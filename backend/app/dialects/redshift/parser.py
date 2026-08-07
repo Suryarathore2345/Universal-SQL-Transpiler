@@ -134,6 +134,7 @@ class RedshiftParser(DialectParser):
         uniques: List[IRUniqueConstraint] = []
         checks: List[IRCheckConstraint] = []
 
+        inline_pk_cols: List[str] = []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
             for expr in schema_expr.expressions:
@@ -142,6 +143,15 @@ class RedshiftParser(DialectParser):
                     columns.append(col)
                     warnings.extend(w)
                     doc_refs.extend(d)
+                    # Inline column-level PRIMARY KEY (e.g. `id INT PRIMARY
+                    # KEY`) is a separate constraint kind from the
+                    # table-level `PRIMARY KEY (col, ...)` clause handled
+                    # below — without this check it was silently dropped.
+                    if any(
+                        isinstance(c.kind if hasattr(c, "kind") else c, exp.PrimaryKeyColumnConstraint)
+                        for c in expr.constraints
+                    ):
+                        inline_pk_cols.append(col.name)
                 elif isinstance(expr, exp.PrimaryKey):
                     pk = IRPrimaryKey(
                         columns=[c.name for c in expr.expressions],
@@ -156,6 +166,9 @@ class RedshiftParser(DialectParser):
                     ))
                 elif isinstance(expr, exp.CheckColumnConstraint):
                     checks.append(IRCheckConstraint(expression=expr.this.sql()))
+
+        if pk is None and inline_pk_cols:
+            pk = IRPrimaryKey(columns=inline_pk_cols, not_enforced=True)
 
         # Parse Redshift-specific properties from raw SQL (sqlglot doesn't fully parse these)
         distribution, w1, d1 = self._extract_distribution(raw_sql)
@@ -233,14 +246,26 @@ class RedshiftParser(DialectParser):
                 if s is not None:
                     try:
                         start = int(str(s.this if hasattr(s, "this") else s))
-                    except Exception:
-                        pass
+                    except (ValueError, TypeError):
+                        warnings.append(IRWarning(
+                            feature="IDENTITY_SEED_UNPARSEABLE",
+                            message=f"Column '{name}': IDENTITY seed value could not be "
+                                    f"parsed as an integer (defaulted to {start}). Verify "
+                                    f"the generated IDENTITY start value is correct.",
+                            severity=Warningseverity.WARNING,
+                        ))
                 inc = c.args.get("increment")
                 if inc is not None:
                     try:
                         step = int(str(inc.this if hasattr(inc, "this") else inc))
-                    except Exception:
-                        pass
+                    except (ValueError, TypeError):
+                        warnings.append(IRWarning(
+                            feature="IDENTITY_STEP_UNPARSEABLE",
+                            message=f"Column '{name}': IDENTITY increment value could not be "
+                                    f"parsed as an integer (defaulted to {step}). Verify "
+                                    f"the generated IDENTITY increment value is correct.",
+                            severity=Warningseverity.WARNING,
+                        ))
                 identity = IRIdentity(start=start, increment=step)
             elif isinstance(constraint, exp.ColumnConstraint) and hasattr(constraint, "kind"):
                 kind_sql = constraint.sql("redshift").upper()
@@ -288,14 +313,69 @@ class RedshiftParser(DialectParser):
     # Docs: https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
     # -------------------------------------------------------------------------
 
+    # Simple, bounded keyword searches — used by _find_column_owning_keyword
+    # below instead of a single regex spanning the whole column list.
+    _DISTKEY_KEYWORD = re.compile(r'\bDISTKEY\b', re.IGNORECASE)
+    _SORTKEY_KEYWORD = re.compile(r'\bSORTKEY\b', re.IGNORECASE)
+
+    def _find_column_owning_keyword(self, sql: str, keyword_pattern: "re.Pattern") -> Optional[str]:
+        """
+        Find the column name that owns a column-level constraint keyword
+        (e.g. `col_name TYPE ... DISTKEY`).
+
+        A prior implementation used a single regex of the shape
+        `(\\w+)\\s+\\w[\\w\\s(),]*\\bDISTKEY\\b` run over the whole
+        CREATE TABLE text. That pattern is vulnerable to catastrophic
+        backtracking: on a wide table with no DISTKEY (the common case —
+        most tables don't define one), the engine tries every possible
+        start position and backtracks extensively before giving up.
+        Measured: ~38 seconds of pure regex time on a 3,200-column table
+        with no DISTKEY, scaling worse than quadratically with column count.
+
+        This version locates the keyword with a simple, non-backtracking
+        bounded search, then walks backward by hand — tracking paren depth
+        so a nested type like DECIMAL(18,2) isn't mistaken for the column
+        list's boundary — to the nearest preceding top-level comma or the
+        column list's opening paren, and extracts the leading identifier
+        from that short, column-scoped substring. This is linear in input
+        size with no backtracking risk at any table width.
+
+        Operates on the original (non-uppercased) SQL so the returned
+        column name preserves its original source casing.
+        """
+        m = keyword_pattern.search(sql)
+        if not m:
+            return None
+        depth = 0
+        i = m.start() - 1
+        while i >= 0:
+            ch = sql[i]
+            if ch == ')':
+                depth += 1
+            elif ch == '(':
+                if depth == 0:
+                    break  # reached the column list's opening paren
+                depth -= 1
+            elif ch == ',' and depth == 0:
+                break  # reached the previous column's separating comma
+            i -= 1
+        scope = sql[i + 1:m.start()]
+        col_match = re.match(r'\s*(\w+)', scope)
+        return col_match.group(1) if col_match else None
+
     def _extract_distribution(
         self, sql: str
     ) -> Tuple[Optional[IRDistribution], List[IRWarning], List[IRDocReference]]:
         """
-        Extract DISTSTYLE / DISTKEY from Redshift DDL.
+        Extract DISTSTYLE / DISTKEY from Redshift DDL. Operates on the
+        original (non-uppercased) SQL throughout, so the extracted column
+        name preserves its original source casing — a table with
+        `DISTKEY(customer_id)` must not come back as `DISTKEY(CUSTOMER_ID)`,
+        which would silently reference a nonexistent column under a
+        case-sensitive target collation.
+
         Redshift docs: https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
         """
-        sql_u = sql.upper()
         doc_refs = [IRDocReference(
             title="Redshift DISTSTYLE/DISTKEY",
             url="https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html",
@@ -303,8 +383,26 @@ class RedshiftParser(DialectParser):
             purpose="Distribution key extraction",
         )]
 
+        # DISTKEY(col) — table-level form, e.g. `... ) DISTKEY(customer_id)`,
+        # appearing after the column list's closing paren. Must be checked
+        # first and independently of DISTSTYLE: _find_column_owning_keyword
+        # below only understands DISTKEY as an inline, column-scoped marker
+        # (nested inside the column list's parens) — a table-level DISTKEY
+        # sits *outside* those parens, so the backward paren-depth scan
+        # would misidentify the column list's own closing paren as a
+        # nested group and walk straight past the table's opening paren
+        # to whatever word starts the statement (i.e. "CREATE").
+        key_cols = []
+        dk = re.search(r"DISTKEY\s*\(\s*(\w+)\s*\)", sql, re.IGNORECASE)
+        if dk:
+            key_cols = [dk.group(1)]
+        else:
+            col = self._find_column_owning_keyword(sql, self._DISTKEY_KEYWORD)
+            if col:
+                key_cols = [col]
+
         # DISTSTYLE KEY / EVEN / ALL / AUTO
-        m = re.search(r"DISTSTYLE\s+(KEY|EVEN|ALL|AUTO)", sql_u)
+        m = re.search(r"\bDISTSTYLE\s+(KEY|EVEN|ALL|AUTO)\b", sql, re.IGNORECASE)
         if m:
             style_map = {
                 "KEY": DistributionStyle.HASH,
@@ -312,22 +410,14 @@ class RedshiftParser(DialectParser):
                 "ALL": DistributionStyle.REPLICATE,
                 "AUTO": DistributionStyle.AUTO,
             }
-            style = style_map.get(m.group(1), DistributionStyle.ROUND_ROBIN)
-            key_cols = []
-            # DISTKEY(col) or column-level DISTKEY
-            dk = re.search(r"DISTKEY\s*\(\s*(\w+)\s*\)", sql_u)
-            if not dk:
-                dk = re.search(r"(\w+)\s+\w+.*?DISTKEY", sql_u)
-            if dk:
-                key_cols = [dk.group(1)]
+            style = style_map.get(m.group(1).upper(), DistributionStyle.ROUND_ROBIN)
             return IRDistribution(style=style, key_columns=key_cols), [], doc_refs
 
-        # Inline DISTKEY on column
-        dk = re.search(r"(\w+)\s+\w[\w\s(),]*\bDISTKEY\b", sql_u)
-        if dk:
+        # No DISTSTYLE clause — a DISTKEY alone implies DISTSTYLE KEY
+        if key_cols:
             return IRDistribution(
                 style=DistributionStyle.HASH,
-                key_columns=[dk.group(1)],
+                key_columns=key_cols,
             ), [], doc_refs
 
         return None, [], []
@@ -360,10 +450,9 @@ class RedshiftParser(DialectParser):
             return IRSortKey(sort_type=sort_type, columns=cols), [], doc_refs
 
         # Column-level SORTKEY: "col_name <type> ... SORTKEY"
-        # Match the column name before its type definition (not uppercased)
-        m2 = re.search(r"^\s*(\w+)\s+\w[\w\s(),]*\bSORTKEY\b", sql, re.IGNORECASE | re.MULTILINE)
-        if m2:
-            return IRSortKey(sort_type=sort_type, columns=[m2.group(1)]), [], doc_refs
+        col = self._find_column_owning_keyword(sql, self._SORTKEY_KEYWORD)
+        if col:
+            return IRSortKey(sort_type=sort_type, columns=[col]), [], doc_refs
 
         return None, [], []
 

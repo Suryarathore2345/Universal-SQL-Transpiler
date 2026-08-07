@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION analytics.apply_tax(amount FLOAT)
+CREATE OR REPLACE FUNCTION "analytics"."apply_tax"(amount FLOAT)
 RETURNS FLOAT
 LANGUAGE SQL
 AS

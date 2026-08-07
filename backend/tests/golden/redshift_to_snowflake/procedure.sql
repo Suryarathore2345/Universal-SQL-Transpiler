@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE analytics.upsert_order(p_order_id INTEGER, p_amount VARCHAR(MAX))
+CREATE OR REPLACE PROCEDURE "analytics"."upsert_order"(p_order_id INTEGER, p_amount VARCHAR(MAX))
 RETURNS VARIANT
 LANGUAGE PLPGSQL
 AS

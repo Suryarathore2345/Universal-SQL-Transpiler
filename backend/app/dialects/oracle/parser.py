@@ -103,12 +103,22 @@ class OracleParser(DialectParser):
         if_not_exists = bool(node.args.get("exists"))
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
+        inline_pk_cols: List[str] = []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
             for expr in schema_expr.expressions:
                 if isinstance(expr, exp.ColumnDef):
                     col, w, d = self._parse_column_def(expr)
                     columns.append(col); warnings.extend(w); doc_refs.extend(d)
+                    # Inline column-level PRIMARY KEY (e.g. `id NUMBER(10)
+                    # PRIMARY KEY`) is a separate constraint kind from the
+                    # table-level `PRIMARY KEY (col, ...)` clause handled
+                    # below — without this check it was silently dropped.
+                    if any(
+                        isinstance(c.kind if hasattr(c, "kind") else c, exp.PrimaryKeyColumnConstraint)
+                        for c in expr.constraints
+                    ):
+                        inline_pk_cols.append(col.name)
                 elif isinstance(expr, exp.PrimaryKey):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
                 elif isinstance(expr, exp.ForeignKey):
@@ -124,6 +134,9 @@ class OracleParser(DialectParser):
                 elif isinstance(expr, exp.Check):
                     checks.append(IRCheckConstraint(expression=expr.this.sql() if expr.this else ""))
 
+        if pk is None and inline_pk_cols:
+            pk = IRPrimaryKey(columns=inline_pk_cols)
+
         partition_by = self._extract_partition(raw_sql)
 
         return IRTable(name=name, schema_name=schema, database_name=db, columns=columns, primary_key=pk, foreign_keys=fks, unique_constraints=uniques, check_constraints=checks, partition_by=partition_by, is_temporary=is_temp, or_replace=or_replace, if_not_exists=if_not_exists), warnings, doc_refs
@@ -135,6 +148,26 @@ class OracleParser(DialectParser):
         type_str = type_node.sql("oracle") if type_node else "VARCHAR2(255)"
         ir_type, w, d = self._parse_data_type(type_str)
         warnings.extend(w); doc_refs.extend(d)
+
+        # Oracle DATE stores a full timestamp (year through second) — unlike
+        # the ANSI/most-other-dialect DATE type, which is date-only. Every
+        # non-Oracle target's DATE type will silently truncate the time
+        # component with no error, so this must be flagged explicitly;
+        # nothing else in the pipeline knows this column originated from an
+        # Oracle DATE by the time generation happens.
+        if type_str.strip().upper() == "DATE":
+            warnings.append(IRWarning(
+                feature="ORACLE_DATE_HAS_TIME_COMPONENT",
+                message=(
+                    f"Column '{name}' is Oracle DATE, which stores a full timestamp "
+                    "(including hour/minute/second) — not date-only as in most other "
+                    "dialects. If the target's DATE type is date-only, the time "
+                    "component will be silently dropped. Consider mapping to a "
+                    "TIMESTAMP type on the target if time-of-day data matters."
+                ),
+                doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/Data-Types.html",
+                severity=Warningseverity.WARNING,
+            ))
 
         is_nullable, default_val, identity = True, None, None
         for constraint in col_def.constraints:

@@ -1,4 +1,4 @@
-CREATE FUNCTION dbo.apply_tax(IN amount VARCHAR(MAX))
+CREATE FUNCTION "dbo"."apply_tax"(IN amount VARCHAR(MAX))
 RETURNS DECIMAL(18,4)
 STABLE
 AS $$

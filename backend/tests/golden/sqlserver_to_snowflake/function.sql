@@ -1,4 +1,4 @@
-CREATE FUNCTION dbo.apply_tax(amount VARCHAR(MAX))
+CREATE FUNCTION "dbo"."apply_tax"(amount VARCHAR(MAX))
 RETURNS NUMBER(18,4)
 LANGUAGE SQL
 AS

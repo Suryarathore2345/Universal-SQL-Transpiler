@@ -92,6 +92,26 @@ class TypeMapper:
         for generic_name, info in self._mappings.items():
             dialects = info.get("dialects", {})
             entry = dialects.get(dialect_key, {})
+            if not entry:
+                continue
+            # A dialect entry marked unsupported/fallback borrows another
+            # GenericType's native syntax to represent itself (e.g. Fabric DW
+            # has no TINYINT, so GenericType.INT8 falls back to emitting
+            # "SMALLINT"). Such fallback entries must never claim reverse
+            # (source→generic) ownership of the type string they borrowed —
+            # otherwise a genuine SMALLINT source column would misparse as
+            # the narrower INT8. Only entries that are the type's true,
+            # natively-supported representation participate in reverse match.
+            if entry.get("unsupported"):
+                continue
+            # Explicit opt-out for dialects where multiple GenericTypes are
+            # deliberately coarsened to one native representation on the way
+            # OUT (e.g. BigQuery has only INT64, so INT8/INT16/INT32 all emit
+            # "INT64") — these narrower entries must not compete for reverse
+            # match against the type that's genuinely their equal-or-wider
+            # counterpart; set reverse_match: false on the narrower entries.
+            if entry.get("reverse_match") is False:
+                continue
             primary = entry.get("type", "").upper()
             aliases = [a.upper() for a in entry.get("aliases", [])]
             if bare == primary or bare in aliases:
@@ -99,6 +119,13 @@ class TypeMapper:
                     g = GenericType(generic_name)
                 except ValueError:
                     g = GenericType.UNKNOWN
+                # Single-arg parenthesized numeric types (e.g. Oracle NUMBER(10))
+                # specify precision, not length — length only applies to the
+                # VARCHAR/CHAR family. The generic syntax-level parse above can't
+                # know this until the GenericType is resolved, so re-home the
+                # value here rather than losing the user's explicit precision.
+                if g == GenericType.DECIMAL and length is not None and precision is None:
+                    precision, length = length, None
                 return g, precision, scale, length
 
         return GenericType.UNKNOWN, precision, scale, length
@@ -159,6 +186,43 @@ class TypeMapper:
                 fallback_applied=True,
             ))
             base_type = fallback
+
+        # Clamp DECIMAL precision/scale to the target dialect's documented
+        # maximum. Without this, a source precision that's legal in the
+        # source dialect but exceeds the target's limit (e.g. BigQuery
+        # BIGNUMERIC(50,10) → Snowflake, which caps NUMBER at 38) is emitted
+        # verbatim and fails at CREATE TABLE time on the target with no warning.
+        if generic_type == GenericType.DECIMAL:
+            max_precision = dialect_entry.get("max_precision")
+            max_scale = dialect_entry.get("max_scale")
+            if precision is not None and max_precision is not None and precision > max_precision:
+                warnings.append(IRWarning(
+                    feature=f"{generic_type.value}_PRECISION_CLAMPED",
+                    message=(
+                        f"Precision {precision} exceeds {target_dialect.value}'s maximum "
+                        f"of {max_precision} for {base_type}; clamped to {max_precision}. "
+                        f"Review whether this causes numeric truncation."
+                    ),
+                    doc_url=doc_url,
+                    severity=Warningseverity.WARNING,
+                    fallback_applied=True,
+                ))
+                if scale is not None and scale > max_precision:
+                    scale = max_precision
+                precision = max_precision
+            if scale is not None and max_scale is not None and scale > max_scale:
+                warnings.append(IRWarning(
+                    feature=f"{generic_type.value}_SCALE_CLAMPED",
+                    message=(
+                        f"Scale {scale} exceeds {target_dialect.value}'s maximum "
+                        f"of {max_scale} for {base_type}; clamped to {max_scale}. "
+                        f"Review whether this causes numeric truncation."
+                    ),
+                    doc_url=doc_url,
+                    severity=Warningseverity.WARNING,
+                    fallback_applied=True,
+                ))
+                scale = max_scale
 
         # Rebuild type string with precision/scale/length
         type_str = self._apply_params(base_type, generic_type, precision, scale, length, dialect_entry)
@@ -248,84 +312,18 @@ class DialectParser(ABC):
 
     def _split_statements(self, sql: str) -> List[str]:
         """
-        Statement splitter on semicolons, aware of:
-          - Single-quoted strings ('...')
-          - Double-quoted identifiers ("...")
-          - Line comments (--)
-          - Block comments (/* ... */)
-          - Dollar-quoted bodies ($$...$$, $tag$...$tag$)
+        Statement splitter on semicolons, aware of single-quoted strings,
+        double-quoted identifiers, line/block comments, and dollar-quoted
+        bodies ($$...$$, $tag$...$tag$ — used by Redshift/Snowflake/
+        PostgreSQL/Databricks to embed procedural bodies).
 
-        Dollar-quoting is used by Redshift, Snowflake, PostgreSQL, and Databricks
-        to embed procedural bodies; any ; inside such a block must not split.
+        Delegates to the shared implementation in `app.sql_text_utils` —
+        `query_transpiler.py`'s SELECT/DML path uses the same function, so
+        there is exactly one statement-splitting behavior across the whole
+        codebase instead of two independently-maintained, divergent copies.
         """
-        parts: List[str] = []
-        current: List[str] = []
-        in_single = False
-        in_double = False
-        in_line_comment = False
-        in_block_comment = False
-        dollar_tag: Optional[str] = None  # non-None while inside $tag$...$tag$
-        i = 0
-        while i < len(sql):
-            ch = sql[i]
-            nch = sql[i + 1] if i + 1 < len(sql) else ""
-
-            # Inside a dollar-quoted block: scan for closing tag
-            if dollar_tag is not None:
-                closing = f"${dollar_tag}$"
-                if sql[i:i + len(closing)] == closing:
-                    current.append(closing)
-                    i += len(closing)
-                    dollar_tag = None
-                    continue
-                current.append(ch)
-                i += 1
-                continue
-
-            # Detect start of dollar-quoting: $tag$ or $$ (tag may be empty)
-            if (not in_single and not in_double and not in_line_comment
-                    and not in_block_comment and ch == "$"):
-                m = re.match(r'\$(\w*)\$', sql[i:])
-                if m:
-                    tag = m.group(1)
-                    current.append(m.group(0))
-                    i += len(m.group(0))
-                    dollar_tag = tag
-                    continue
-
-            if in_line_comment:
-                if ch == "\n":
-                    in_line_comment = False
-                current.append(ch)
-            elif in_block_comment:
-                if ch == "*" and nch == "/":
-                    current.append("*/")
-                    i += 2
-                    in_block_comment = False
-                    continue
-                current.append(ch)
-            elif not in_single and not in_double and ch == "-" and nch == "-":
-                in_line_comment = True
-                current.append(ch)
-            elif not in_single and not in_double and ch == "/" and nch == "*":
-                in_block_comment = True
-                current.append(ch)
-            elif ch == "'" and not in_double:
-                in_single = not in_single
-                current.append(ch)
-            elif ch == '"' and not in_single:
-                in_double = not in_double
-                current.append(ch)
-            elif ch == ";" and not in_single and not in_double:
-                parts.append("".join(current).strip())
-                current = []
-            else:
-                current.append(ch)
-            i += 1
-
-        if "".join(current).strip():
-            parts.append("".join(current).strip())
-        return [p for p in parts if p]
+        from app.sql_text_utils import split_statements
+        return split_statements(sql)
 
     def _parse_data_type(self, type_str: str) -> Tuple[IRDataType, List[IRWarning], List[IRDocReference]]:
         """
@@ -480,6 +478,111 @@ class DialectGenerator(ABC):
         Subclasses override for dialect-specific quoting.
         """
         return f'"{name}"'
+
+    # -----------------------------------------------------------------------
+    # Literal/comment masking — protects the ~75 regex-based _convert_*
+    # helpers below from rewriting text that happens to appear inside a
+    # string literal, quoted identifier, or comment. Without this, a view
+    # body like `SELECT 'call NVL(a,b) to fix this' AS note` had its literal
+    # silently rewritten to 'call ISNULL(a,b) to fix this' — the regexes
+    # have no concept of "this text is data, not code." Call
+    # _mask_protected_spans() before running the conversion chain, and
+    # _unmask_protected_spans() on the result before returning it.
+    # -----------------------------------------------------------------------
+
+    _MASK_OPEN = ""
+    _MASK_CLOSE = ""
+
+    def _mask_protected_spans(self, sql: str) -> Tuple[str, Dict[str, str]]:
+        """
+        Replace string literals ('...'), quoted/bracketed identifiers
+        ("..." and [...]), line comments (-- ...), and block comments
+        (/* ... */) with opaque placeholder tokens, so downstream regex
+        substitutions can never see (and therefore never rewrite) their
+        contents. Returns (masked_sql, restore_map); pass both to
+        _unmask_protected_spans() to restore the original text verbatim.
+        """
+        restore_map: Dict[str, str] = {}
+        out: List[str] = []
+        i = 0
+        n = len(sql)
+        counter = 0
+
+        def emit(span: str) -> None:
+            nonlocal counter
+            token = f"{self._MASK_OPEN}{counter}{self._MASK_CLOSE}"
+            restore_map[token] = span
+            counter += 1
+            out.append(token)
+
+        while i < n:
+            ch = sql[i]
+            nch = sql[i + 1] if i + 1 < n else ""
+
+            if ch == "-" and nch == "-":
+                j = sql.find("\n", i)
+                j = n if j == -1 else j
+                emit(sql[i:j])
+                i = j
+                continue
+
+            if ch == "/" and nch == "*":
+                j = sql.find("*/", i + 2)
+                j = n if j == -1 else j + 2
+                emit(sql[i:j])
+                i = j
+                continue
+
+            if ch == "'":
+                j = i + 1
+                while j < n:
+                    if sql[j] == "'":
+                        if sql[j:j + 2] == "''":
+                            j += 2
+                            continue
+                        j += 1
+                        break
+                    j += 1
+                else:
+                    j = n
+                emit(sql[i:j])
+                i = j
+                continue
+
+            if ch == '"':
+                j = i + 1
+                while j < n:
+                    if sql[j] == '"':
+                        if sql[j:j + 2] == '""':
+                            j += 2
+                            continue
+                        j += 1
+                        break
+                    j += 1
+                else:
+                    j = n
+                emit(sql[i:j])
+                i = j
+                continue
+
+            if ch == "[":
+                j = sql.find("]", i + 1)
+                j = n if j == -1 else j + 1
+                emit(sql[i:j])
+                i = j
+                continue
+
+            out.append(ch)
+            i += 1
+
+        return "".join(out), restore_map
+
+    def _unmask_protected_spans(self, sql: str, restore_map: Dict[str, str]) -> str:
+        """Restore the original text hidden behind _mask_protected_spans() placeholders."""
+        if not restore_map:
+            return sql
+        pattern = re.compile(f"{self._MASK_OPEN}\\d+{self._MASK_CLOSE}")
+        return pattern.sub(lambda m: restore_map.get(m.group(0), m.group(0)), sql)
 
     def generate_procedure(
         self, proc: IRProcedure
@@ -662,6 +765,12 @@ class DialectGenerator(ABC):
         result = []
         last = 0
         for m in pattern.finditer(sql):
+            if m.start() < last:
+                # Already consumed as part of an outer DECODE's args (e.g. a
+                # nested DECODE(...) appearing inside another DECODE's
+                # argument list) — skip to avoid double-processing the same
+                # span, which previously produced unbalanced CASE/END output.
+                continue
             args_str = self._extract_func_args_str(sql, "DECODE", m.start())
             if args_str is None:
                 result.append(sql[last:m.end()])
@@ -1035,7 +1144,24 @@ class DialectGenerator(ABC):
     def _apply_tsql_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
         """Apply all source→T-SQL function conversions for view/MV bodies."""
         warnings: List[IRWarning] = []
+        # Mask string literals/quoted identifiers/comments so none of the
+        # regex conversions below can rewrite text that is data, not code.
+        # _convert_backtick_identifiers runs first and BEFORE masking on
+        # purpose — backtick spans are intentionally left unmasked so this
+        # converter can still see and rewrite them.
         sql = self._convert_backtick_identifiers(sql)
+        # These three read (and/or rewrite) the actual text INSIDE a quoted
+        # argument — e.g. DATE_TRUNC('DAY', ts) needs to see the real 'DAY'
+        # string to map it to a target format code — so they must run on
+        # the real text, before literals are masked below.
+        sql = self._convert_date_trunc(sql)
+        sql = self._convert_date_part(sql)
+        sql, tz_warnings = self._convert_timezone_to_at_time_zone(sql)
+        warnings.extend(tz_warnings)
+        # Mask string literals/quoted identifiers/comments so none of the
+        # remaining (name-only, argument-content-agnostic) regex conversions
+        # below can rewrite text that is data, not code.
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_double_colon_cast(sql)
         sql = self._convert_nvl2_to_case(sql)
@@ -1044,9 +1170,7 @@ class DialectGenerator(ABC):
         sql = self._convert_pipe_concat_to_plus(sql)
         sql = self._convert_current_date(sql)
         sql = self._convert_sysdate(sql)
-        sql = self._convert_date_trunc(sql)
         sql = self._convert_date_part_year_to_year(sql)
-        sql = self._convert_date_part(sql)
         sql = self._convert_extract_to_datepart(sql)
         sql = self._convert_length_to_len(sql)
         sql = self._convert_substr_to_substring(sql)
@@ -1057,11 +1181,54 @@ class DialectGenerator(ABC):
         sql = self._convert_listagg_to_string_agg(sql)
         sql = self._convert_to_char_to_format(sql)
         sql = self._convert_to_number_to_cast(sql)
-        sql, tz_warnings = self._convert_timezone_to_at_time_zone(sql)
-        warnings.extend(tz_warnings)
+        sql = self._strip_recursive_keyword(sql)
+        sql, limit_warnings = self._convert_limit_offset_to_fetch(sql)
+        warnings.extend(limit_warnings)
         warnings.extend(self._flag_unsupported_initcap(sql))
         warnings.extend(self._flag_unsupported_regexp(sql))
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
+
+    def _strip_recursive_keyword(self, sql: str) -> str:
+        """
+        T-SQL (SQL Server / Synapse / Fabric DW) does not support the
+        RECURSIVE keyword in a WITH clause — recursive CTEs are written as
+        plain `WITH cte AS (...)`. Left unconverted, `WITH RECURSIVE ...`
+        is a guaranteed CREATE VIEW syntax error on every T-SQL target.
+        """
+        return re.sub(r'\bWITH\s+RECURSIVE\b', 'WITH', sql, flags=re.IGNORECASE)
+
+    def _convert_limit_offset_to_fetch(self, sql: str) -> Tuple[str, List[IRWarning]]:
+        """
+        Convert `LIMIT n [OFFSET m]` → `OFFSET m ROWS FETCH NEXT n ROWS ONLY`
+        for T-SQL targets, which do not support LIMIT/OFFSET syntax at all.
+        T-SQL's FETCH clause requires an ORDER BY; if the source query has
+        none, one can't be safely invented here, so a warning is raised
+        instead of silently emitting SQL that will still fail to parse.
+        """
+        warnings: List[IRWarning] = []
+        pattern = re.compile(r'\bLIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?', re.IGNORECASE)
+        found = bool(pattern.search(sql))
+
+        def _repl(m: "re.Match") -> str:
+            limit_n = m.group(1)
+            offset_m = m.group(2) or "0"
+            return f"OFFSET {offset_m} ROWS FETCH NEXT {limit_n} ROWS ONLY"
+
+        converted = pattern.sub(_repl, sql)
+        if found and not re.search(r'\bORDER\s+BY\b', sql, re.IGNORECASE):
+            warnings.append(IRWarning(
+                feature="LIMIT_OFFSET_REQUIRES_ORDER_BY",
+                message=(
+                    "LIMIT/OFFSET was converted to T-SQL's OFFSET...FETCH NEXT "
+                    "syntax, which requires an ORDER BY clause. The source query "
+                    "has no ORDER BY — add one before deploying this statement, "
+                    "or the generated SQL will fail with a syntax error."
+                ),
+                severity=Warningseverity.WARNING,
+                unsupported=True,
+            ))
+        return converted, warnings
 
     def _convert_timezone_to_at_time_zone(self, sql: str) -> Tuple[str, List[IRWarning]]:
         """
@@ -1513,6 +1680,10 @@ class DialectGenerator(ABC):
         Oracle-native: NVL, NVL2, DECODE, SYSDATE, ::, INSTR, ADD_MONTHS, LAST_DAY, LISTAGG, TO_CHAR, TRUNC."""
         warnings: List[IRWarning] = []
         sql = self._convert_backtick_identifiers(sql)
+        # Read/rewrite quoted argument content — must run on real text.
+        sql = self._convert_datetrunc_to_trunc_oracle(sql)
+        sql = self._convert_datepart_to_extract(sql)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_double_colon_cast_to_cast(sql)
         sql = self._convert_isnull_to_nvl(sql)
         sql = self._convert_getdate_to_sysdate(sql)
@@ -1522,11 +1693,10 @@ class DialectGenerator(ABC):
         sql = self._convert_charindex_to_instr(sql)
         sql = self._convert_string_agg_to_listagg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_trunc_oracle(sql)
-        sql = self._convert_datepart_to_extract(sql)
         sql = self._convert_dateadd_to_add_months(sql)
         sql = self._convert_tsql_format_to_to_char(sql)
         sql = self._convert_date_part_year_to_extract(sql)
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
 
     def _apply_snowflake_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -1534,6 +1704,9 @@ class DialectGenerator(ABC):
         Snowflake-native: NVL, NVL2, DECODE, ::, DATE_TRUNC, DATE_PART, LISTAGG, LAST_DAY, TO_CHAR, ADD_MONTHS."""
         warnings: List[IRWarning] = []
         sql = self._convert_backtick_identifiers(sql)
+        sql = self._convert_datetrunc_to_date_trunc(sql)
+        sql = self._convert_datepart_to_date_part(sql)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_isnull_to_nvl(sql)
         sql = self._convert_getdate_to_current_timestamp(sql)
@@ -1542,16 +1715,18 @@ class DialectGenerator(ABC):
         sql = self._convert_ceiling_to_ceil(sql)
         sql = self._convert_string_agg_to_listagg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_date_trunc(sql)
-        sql = self._convert_datepart_to_date_part(sql)
         sql = self._convert_tsql_format_to_to_char(sql)
         sql = self._convert_date_part_year_to_year(sql)
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
 
     def _apply_bigquery_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
         """Apply all source→BigQuery conversions for view/MV bodies.
         BigQuery-native: IFNULL, STRING_AGG, EXTRACT, DATE_TRUNC(expr, part), LAST_DAY, DATE_ADD."""
         warnings: List[IRWarning] = []
+        sql = self._convert_datetrunc_to_date_trunc_bigquery(sql)
+        sql = self._convert_datepart_to_extract(sql)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_nvl2_to_case(sql)
         sql = self._convert_nvl_to_ifnull(sql)
@@ -1564,12 +1739,11 @@ class DialectGenerator(ABC):
         sql = self._convert_ceiling_to_ceil(sql)
         sql = self._convert_listagg_to_string_agg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_date_trunc_bigquery(sql)
-        sql = self._convert_datepart_to_extract(sql)
         sql = self._convert_dateadd_to_date_add_bigquery(sql)
         sql = self._convert_add_months_to_date_add_bigquery(sql)
         sql = self._convert_charindex_to_strpos(sql)
         sql = self._convert_date_part_year_to_year(sql)
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
 
     def _apply_databricks_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -1577,6 +1751,11 @@ class DialectGenerator(ABC):
         Databricks-native: IFNULL, COALESCE, STRING_AGG, LAST_DAY, date_trunc, EXTRACT, ADD_MONTHS.
         Note: Databricks uses backtick quoting — do NOT convert backticks to double-quotes."""
         warnings: List[IRWarning] = []
+        sql = self._convert_datetrunc_to_date_trunc(sql)
+        sql = self._convert_datepart_to_extract(sql)
+        sql, tz_warnings = self._convert_timezone_to_spark(sql)
+        warnings.extend(tz_warnings)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_nvl2_to_case(sql)
         sql = self._convert_nvl_to_coalesce(sql)
@@ -1589,12 +1768,9 @@ class DialectGenerator(ABC):
         sql = self._convert_ceiling_to_ceil(sql)
         sql = self._convert_listagg_to_string_agg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_date_trunc(sql)
-        sql = self._convert_datepart_to_extract(sql)
         sql = self._convert_charindex_to_locate(sql)
         sql = self._convert_date_part_year_to_year(sql)
-        sql, tz_warnings = self._convert_timezone_to_spark(sql)
-        warnings.extend(tz_warnings)
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
 
     # -----------------------------------------------------------------------
@@ -1852,6 +2028,11 @@ class DialectGenerator(ABC):
         Note: Spark SQL uses backtick quoting — do NOT convert backticks to double-quotes."""
         warnings: List[IRWarning] = []
         sql = self._strip_with_no_schema_binding(sql)
+        sql = self._convert_datetrunc_to_date_trunc(sql)
+        sql = self._convert_datepart_to_extract(sql)
+        sql, tz_warnings = self._convert_timezone_to_spark(sql)
+        warnings.extend(tz_warnings)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_nvl2_to_case(sql)
         sql = self._convert_nvl_to_coalesce(sql)
@@ -1864,14 +2045,11 @@ class DialectGenerator(ABC):
         sql = self._convert_ceiling_to_ceil(sql)
         sql = self._convert_listagg_to_string_agg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_date_trunc(sql)
-        sql = self._convert_datepart_to_extract(sql)
         sql = self._convert_charindex_to_locate(sql)
         sql = self._convert_split_part_to_spark(sql)
         sql = self._convert_date_part_year_to_year(sql)
-        sql, tz_warnings = self._convert_timezone_to_spark(sql)
-        warnings.extend(tz_warnings)
         warnings.extend(self._flag_qualify_unsupported(sql))
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings
 
     def _apply_redshift_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -1879,13 +2057,15 @@ class DialectGenerator(ABC):
         Redshift-native: NVL, NVL2, DECODE, GETDATE, SYSDATE, ::, LEN, LISTAGG, LAST_DAY, DATE_TRUNC, DATE_PART, ADD_MONTHS, DATEADD."""
         warnings: List[IRWarning] = []
         sql = self._convert_backtick_identifiers(sql)
+        sql = self._convert_datetrunc_to_date_trunc(sql)
+        sql = self._convert_datepart_to_date_part(sql)
+        sql, _mask_map = self._mask_protected_spans(sql)
         sql = self._convert_varchar2_to_varchar(sql)
         sql = self._convert_isnull_to_nvl(sql)
         sql = self._convert_decode_to_case(sql)
         sql = self._convert_string_agg_to_listagg(sql)
         sql = self._convert_eomonth_to_last_day(sql)
-        sql = self._convert_datetrunc_to_date_trunc(sql)
-        sql = self._convert_datepart_to_date_part(sql)
         sql = self._convert_len_to_length(sql)
         sql = self._convert_ceiling_to_ceil(sql)
+        sql = self._unmask_protected_spans(sql, _mask_map)
         return sql, warnings

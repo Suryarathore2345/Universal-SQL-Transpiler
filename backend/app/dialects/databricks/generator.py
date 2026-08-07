@@ -68,8 +68,21 @@ class DatabricksGenerator(DialectGenerator):
             doc_refs.extend(d)
 
         if table.primary_key:
+            # Databricks/Unity Catalog PRIMARY KEY constraints are
+            # informational only by default — never validated against
+            # actual data. NOT ENFORCED makes that explicit in the DDL
+            # itself (matching the BigQuery generator's equivalent marker)
+            # instead of silently implying enforcement that doesn't happen.
             pk_cols = ", ".join(self._quote_identifier(c) for c in table.primary_key.columns)
-            lines.append(f"    PRIMARY KEY ({pk_cols})")
+            lines.append(f"    PRIMARY KEY ({pk_cols}) NOT ENFORCED")
+            warnings.append(IRWarning(
+                feature="PRIMARY_KEY_NOT_ENFORCED_DATABRICKS",
+                message="Databricks/Unity Catalog PRIMARY KEY constraints are informational "
+                        "only and are never validated against actual data — duplicate values "
+                        "are not rejected.",
+                doc_url="https://docs.databricks.com/en/tables/constraints.html",
+                severity=Warningseverity.INFO,
+            ))
 
         body = ",\n".join(lines)
         if table.or_replace:
@@ -150,7 +163,21 @@ class DatabricksGenerator(DialectGenerator):
         parts = [self._quote_identifier(col.name), type_str]
 
         if col.identity:
-            # Databricks GENERATED ALWAYS AS IDENTITY — BIGINT only
+            # Databricks GENERATED ALWAYS AS IDENTITY — BIGINT only. A
+            # narrower type (INT32/INT16/INT8) is rejected by Databricks at
+            # DDL execution time, so it must be widened to BIGINT here
+            # rather than merely warned about — otherwise this method
+            # returns DDL that is guaranteed to fail to deploy.
+            if col.data_type.generic_type != GenericType.INT64:
+                parts[1] = "BIGINT"
+                warnings.append(IRWarning(
+                    feature="IDENTITY_TYPE_DATABRICKS",
+                    message="Databricks GENERATED ALWAYS AS IDENTITY requires BIGINT — "
+                            f"the column's original type ({type_str}) has been widened to BIGINT.",
+                    doc_url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-table-using.html#generated-columns",
+                    severity=Warningseverity.WARNING,
+                    fallback_applied=True,
+                ))
             # Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-table-using.html#generated-columns
             parts.append(f"GENERATED ALWAYS AS IDENTITY (START WITH {col.identity.start} INCREMENT BY {col.identity.increment})")
             doc_refs.append(IRDocReference(
@@ -159,15 +186,6 @@ class DatabricksGenerator(DialectGenerator):
                 platform="databricks",
                 purpose="Identity column generation",
             ))
-            if col.data_type.generic_type not in (GenericType.INT64, GenericType.INT32):
-                warnings.append(IRWarning(
-                    feature="IDENTITY_TYPE_DATABRICKS",
-                    message="Databricks GENERATED ALWAYS AS IDENTITY requires BIGINT. "
-                            "Column type may have been adjusted.",
-                    doc_url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-table-using.html#generated-columns",
-                    severity=Warningseverity.WARNING,
-                    fallback_applied=True,
-                ))
 
         if not col.is_nullable:
             parts.append("NOT NULL")

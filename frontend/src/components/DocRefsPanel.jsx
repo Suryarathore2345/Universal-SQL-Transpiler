@@ -5,14 +5,15 @@
 import { useState } from 'react'
 
 const PLATFORM_ICONS = {
-  redshift:    '🔴',
-  snowflake:   '❄️',
-  sqlserver:   '🪟',
-  synapse:     '⚡',
-  fabric_dw:   '🧵',
-  databricks:  '🔷',
-  oracle:      '🔶',
-  bigquery:    '🔵',
+  redshift:         '🔴',
+  snowflake:        '❄️',
+  sqlserver:        '🪟',
+  synapse:          '⚡',
+  fabric_dw:        '🧵',
+  fabric_lakehouse: '🌊',
+  databricks:       '🔷',
+  oracle:           '🔶',
+  bigquery:         '🔵',
 }
 
 export default function DocRefsPanel({ refs = [] }) {
@@ -28,7 +29,7 @@ export default function DocRefsPanel({ refs = [] }) {
 
   return (
     <section className="doc-refs-panel">
-      <button className="panel-toggle" onClick={() => setOpen(o => !o)}>
+      <button className="panel-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
         <span className="panel-title">
           <span className="doc-icon">📚</span>
           Official docs consulted

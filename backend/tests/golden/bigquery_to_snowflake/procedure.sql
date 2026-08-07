@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE analytics.upsert_order(p_order_id TINYINT, p_amount NUMBER)
+CREATE OR REPLACE PROCEDURE "analytics"."upsert_order"(p_order_id BIGINT, p_amount NUMBER)
 RETURNS VARIANT
 LANGUAGE SQL
 AS

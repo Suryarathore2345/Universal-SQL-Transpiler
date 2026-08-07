@@ -16,6 +16,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from app.api.schemas import (
@@ -151,7 +152,15 @@ async def transpile(request: TranspileRequest) -> TranspileResponse:
     t0 = time.monotonic()
 
     try:
-        result = Transpiler.convert(
+        # Transpiler.convert is fully synchronous and CPU-bound. Calling it
+        # directly here would run it inline on the single asyncio event
+        # loop — FastAPI only offloads to a thread pool automatically for
+        # plain `def` handlers, not `async def` ones — so one slow/large
+        # conversion would block every other request (including this
+        # process's own /api/health probe) for as long as it takes to run.
+        # run_in_threadpool moves the blocking call off the event loop.
+        result = await run_in_threadpool(
+            Transpiler.convert,
             sql=request.sql,
             source_dialect=request.source_dialect,
             target_dialect=request.target_dialect,

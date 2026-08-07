@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW dbo.mv_daily_revenue
+CREATE MATERIALIZED VIEW "dbo"."mv_daily_revenue"
 DISTSTYLE KEY
 DISTKEY ("day")
 AUTO REFRESH YES

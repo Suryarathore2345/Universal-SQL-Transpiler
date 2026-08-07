@@ -31,7 +31,8 @@ generic_types:
       redshift:
         type: "INT2"
         aliases: []
-        notes: "Redshift has no TINYINT; emit as INT2 (alias of SMALLINT). Widening conversion. Do not list SMALLINT here — SMALLINT source should parse as INT16."
+        reverse_match: false
+        notes: "Redshift has no TINYINT; emit as INT2 (alias of SMALLINT). Widening conversion. reverse_match: false so a source column literally typed INT2/SMALLINT correctly resolves to GenericType.INT16 (see that entry), not this one."
         doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Numeric_types201.html"
         confidence: verified
       snowflake:
@@ -42,8 +43,9 @@ generic_types:
         confidence: verified
       bigquery:
         type: "INT64"
-        aliases: ["INT", "SMALLINT", "INTEGER", "BIGINT", "TINYINT", "BYTEINT"]
-        notes: "BigQuery has only INT64 for all integer sizes."
+        aliases: []
+        reverse_match: false
+        notes: "BigQuery has only INT64 for all integer sizes. On generation this emits INT64; on parsing, BigQuery integer columns always resolve to GenericType.INT64 (see the INT64 entry) rather than this narrower type, since BigQuery makes no width distinction."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
         confidence: verified
       databricks:
@@ -102,8 +104,9 @@ generic_types:
         confidence: verified
       bigquery:
         type: "INT64"
-        aliases: ["INT", "SMALLINT", "INTEGER", "BIGINT", "TINYINT", "BYTEINT"]
-        notes: "BigQuery uses INT64 for all integer sizes."
+        aliases: []
+        reverse_match: false
+        notes: "BigQuery uses INT64 for all integer sizes. On parsing, BigQuery integer columns always resolve to GenericType.INT64 (see the INT64 entry)."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
         confidence: verified
       databricks:
@@ -154,7 +157,9 @@ generic_types:
         confidence: verified
       bigquery:
         type: "INT64"
-        aliases: ["INT", "INTEGER", "SMALLINT", "BIGINT", "TINYINT", "BYTEINT"]
+        aliases: []
+        reverse_match: false
+        notes: "BigQuery uses INT64 for all integer sizes. On parsing, BigQuery integer columns always resolve to GenericType.INT64 (see the INT64 entry)."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_type"
         confidence: verified
       databricks:
@@ -169,7 +174,8 @@ generic_types:
         confidence: verified
       fabric_dw:
         type: "INT"
-        aliases: []
+        aliases: ["INTEGER"]
+        notes: "sqlglot's tsql generator round-trips a parsed INT DataType node back out as the string \"INTEGER\" — without this alias, bare INT columns from a Fabric DW source were misclassified as UNKNOWN and fell back to VARCHAR(MAX)."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
       fabric_lakehouse:

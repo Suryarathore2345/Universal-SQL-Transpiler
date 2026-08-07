@@ -1,7 +1,7 @@
 -- Databricks does NOT support CREATE PROCEDURE.
 -- Docs: https://docs.databricks.com/en/sql/language-manual/
 -- Converted to a SQL UDF. Body requires significant manual adaptation.
-CREATE OR REPLACE FUNCTION `analytics`.`upsert_order`(p_order_id TINYINT, p_amount DECIMAL)
+CREATE OR REPLACE FUNCTION `analytics`.`upsert_order`(p_order_id BIGINT, p_amount DECIMAL)
 RETURNS STRING
 RETURN (
   -- -- Translated from unknown → databricks

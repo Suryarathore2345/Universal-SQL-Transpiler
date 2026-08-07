@@ -3,12 +3,14 @@
 Two servers, two terminals: backend (FastAPI, port 8000) and frontend (Vite, port 5173).
 The frontend proxies `/api/*` to the backend, so **start the backend first**.
 
+All commands below are relative to the repository root (the directory containing this file).
+
 ---
 
 ## Terminal 1 — Backend
 
 ```powershell
-cd "C:\Users\SuryadevRathore\OneDrive - Xebia\Desktop\Master-SQL-Trasnspiler\universal-sql-transpiler\backend"
+cd backend
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -16,7 +18,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 You should see:
 ```
 INFO:     Uvicorn running on http://0.0.0.0:8000
-... UST started — 8 dialects loaded
+... UST started — N dialects loaded
 INFO:     Application startup complete.
 ```
 
@@ -32,7 +34,7 @@ curl http://127.0.0.1:8000/api/dialects
 
 > If the `.venv` folder doesn't exist yet, create it first:
 > ```powershell
-> cd "C:\Users\SuryadevRathore\OneDrive - Xebia\Desktop\Master-SQL-Trasnspiler\universal-sql-transpiler\backend"
+> cd backend
 > python -m venv .venv
 > .\.venv\Scripts\Activate.ps1
 > pip install -r requirements.txt
@@ -42,10 +44,10 @@ curl http://127.0.0.1:8000/api/dialects
 
 ## Terminal 2 — Frontend
 
-Open a **new** PowerShell window/tab (keep the backend running in Terminal 1):
+Open a **new** PowerShell window/tab (keep the backend running in Terminal 1), starting again from the repository root:
 
 ```powershell
-cd "C:\Users\SuryadevRathore\OneDrive - Xebia\Desktop\Master-SQL-Trasnspiler\universal-sql-transpiler\frontend"
+cd frontend
 npm run dev
 ```
 
@@ -57,7 +59,7 @@ VITE v5.4.21  ready in ... ms
 
 > If `node_modules` is missing or you get module-not-found errors:
 > ```powershell
-> cd "C:\Users\SuryadevRathore\OneDrive - Xebia\Desktop\Master-SQL-Trasnspiler\universal-sql-transpiler\frontend"
+> cd frontend
 > npm install
 > npm run dev
 > ```
@@ -85,7 +87,13 @@ to exit the Python virtual environment in Terminal 1.
 ## Running the backend test suite
 
 ```powershell
-cd "C:\Users\SuryadevRathore\OneDrive - Xebia\Desktop\Master-SQL-Trasnspiler\universal-sql-transpiler\backend"
+cd backend
 .\.venv\Scripts\Activate.ps1
 python -m pytest tests/ -q
 ```
+
+---
+
+## Quick start (Windows convenience scripts)
+
+From the repository root, `start-backend.cmd` and `start-frontend.cmd` wrap the two commands above (each `cd`s to the correct subfolder relative to its own location, so they work regardless of where the repo is cloned).

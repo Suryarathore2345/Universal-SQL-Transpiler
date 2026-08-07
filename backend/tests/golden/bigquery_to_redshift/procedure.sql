@@ -1,5 +1,5 @@
-CREATE OR REPLACE PROCEDURE analytics.upsert_order(
-    IN p_order_id INT2,
+CREATE OR REPLACE PROCEDURE "analytics"."upsert_order"(
+    IN p_order_id BIGINT,
     IN p_amount DECIMAL
 )
 LANGUAGE plpgsql

@@ -35,12 +35,16 @@ class SnowflakeGenerator(DialectGenerator):
         return f'"{name}"'
 
     def _qualified_name(self, obj) -> str:
+        # Quote every segment — an unquoted name here would silently
+        # uppercase a mixed/lower-case source identifier under Snowflake's
+        # unquoted-identifier folding rules, changing the actual object
+        # name from what the source SQL specified.
         parts = []
         if obj.database_name:
-            parts.append(obj.database_name)
+            parts.append(self._quote_identifier(obj.database_name))
         if obj.schema_name:
-            parts.append(obj.schema_name)
-        parts.append(obj.name)
+            parts.append(self._quote_identifier(obj.schema_name))
+        parts.append(self._quote_identifier(obj.name))
         return ".".join(parts)
 
     # -------------------------------------------------------------------------

@@ -501,6 +501,17 @@ button { cursor: pointer; font-family: inherit; }
   z-index: 10;
   backdrop-filter: blur(2px);
 }
+.editor-placeholder {
+  position: absolute;
+  top: 12px;
+  left: 52px;
+  color: #6b7280;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  pointer-events: none;
+  z-index: 5;
+  user-select: none;
+}
 
 /* ── Center column (Transpile button) ── */
 .center-col {

@@ -121,12 +121,30 @@ _RESIDUALS: Dict[str, List[Tuple[str, re.Pattern, str, Set[str]]]] = {
          # Redshift and Snowflake have a native CONVERT_TIMEZONE function.
          # Databricks and Fabric Lakehouse convert it to from_utc_timestamp().
          {"redshift", "snowflake", "databricks", "fabric_lakehouse"}),
+        ("RESIDUAL_RECURSIVE", re.compile(r'\bWITH\s+RECURSIVE\b', re.I),
+         "WITH RECURSIVE not converted — the RECURSIVE keyword is not valid "
+         "T-SQL syntax and will cause a CREATE VIEW syntax error",
+         # RECURSIVE is valid ANSI/native syntax everywhere except T-SQL
+         {"redshift", "snowflake", "oracle", "bigquery", "databricks", "fabric_lakehouse"}),
+        ("RESIDUAL_LIMIT_OFFSET", re.compile(r'\bLIMIT\s+\d+', re.I),
+         "LIMIT/OFFSET not converted — T-SQL does not support LIMIT/OFFSET "
+         "syntax at all and requires OFFSET...FETCH NEXT instead",
+         # LIMIT is valid native syntax everywhere except T-SQL and Oracle
+         {"redshift", "snowflake", "bigquery", "databricks", "fabric_lakehouse"}),
     ],
     "snowflake": [
         ("RESIDUAL_VARIANT",    re.compile(r'\bVARIANT\b',    re.I),
          "VARIANT type not converted",
          # VARIANT is also supported in Databricks Runtime 15.2+
          {"databricks"}),
+        ("RESIDUAL_RECURSIVE", re.compile(r'\bWITH\s+RECURSIVE\b', re.I),
+         "WITH RECURSIVE not converted — the RECURSIVE keyword is not valid "
+         "T-SQL syntax and will cause a CREATE VIEW syntax error",
+         {"redshift", "snowflake", "oracle", "bigquery", "databricks", "fabric_lakehouse"}),
+        ("RESIDUAL_LIMIT_OFFSET", re.compile(r'\bLIMIT\s+\d+', re.I),
+         "LIMIT/OFFSET not converted — T-SQL does not support LIMIT/OFFSET "
+         "syntax at all and requires OFFSET...FETCH NEXT instead",
+         {"redshift", "snowflake", "bigquery", "databricks", "fabric_lakehouse"}),
         ("RESIDUAL_FLATTEN",    re.compile(r'\bFLATTEN\s*\(', re.I),
          "FLATTEN not converted",                 set()),
         ("RESIDUAL_QUALIFY",    re.compile(r'\bQUALIFY\b',    re.I),
@@ -294,14 +312,31 @@ def compute_confidence(
     Compute a confidence score for the transpilation result.
 
     Tiers (matching official Redshift-Fabric-Transpiler calibration):
-      MANUAL_REVIEW  → 0.50  (any unsupported / blocker feature)
+      MANUAL_REVIEW  → 0.50  (any unsupported / blocker feature, OR any
+                              warning/residual with severity=ERROR)
       PARTIAL        → max(0.65, 1.0 - n*0.05)  where n = warn + residual count
       HIGH           → 1.00  (no warnings of any kind)
+
+    A warning being counted in `unsupported_features` (the `unsupported`
+    bool on IRWarning) is not the only signal that the output may not be
+    valid SQL — a warning can carry severity=ERROR while unsupported=False
+    (e.g. a caught parse failure that falls back to passing the original
+    SQL through unchanged, or a structurally broken statement sqlglot still
+    emitted under a lenient error level). Any such ERROR-severity warning
+    must also force MANUAL_REVIEW; otherwise the score reports HIGH/PARTIAL
+    confidence on output that is not safe to use as-is.
 
     Returns:
         (score: float, level: str)
     """
     if unsupported_features:
+        return 0.50, "MANUAL_REVIEW"
+
+    has_error_severity = any(
+        w.severity == Warningseverity.ERROR
+        for w in list(warnings) + list(residual_warnings)
+    )
+    if has_error_severity:
         return 0.50, "MANUAL_REVIEW"
 
     warn_count = len(warnings) + len(residual_warnings)

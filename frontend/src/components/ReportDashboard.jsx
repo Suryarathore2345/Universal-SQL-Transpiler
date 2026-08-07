@@ -221,6 +221,8 @@ function IssueRow({ item, severity }) {
 
 export default function ReportDashboard({ result, sourceDialect, targetDialect, onClose }) {
   const overlayRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const previouslyFocusedRef = useRef(null)
 
   // Close on Escape
   useEffect(() => {
@@ -228,6 +230,20 @@ export default function ReportDashboard({ result, sourceDialect, targetDialect, 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Move focus into the modal on open, and restore it to whatever had
+  // focus beforehand (e.g. the "View Report" button) on close — without
+  // this, keyboard users tabbing when the modal opens land nowhere inside
+  // it, and lose their place in the page entirely once it closes.
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement
+    closeButtonRef.current?.focus()
+    return () => {
+      if (previouslyFocusedRef.current instanceof HTMLElement) {
+        previouslyFocusedRef.current.focus()
+      }
+    }
+  }, [])
 
   // Close on backdrop click
   function handleOverlayClick(e) {
@@ -257,7 +273,7 @@ export default function ReportDashboard({ result, sourceDialect, targetDialect, 
 
   return (
     <div className="rpt-overlay" ref={overlayRef} onClick={handleOverlayClick}>
-      <div className="rpt-modal" role="dialog" aria-label="Conversion Report">
+      <div className="rpt-modal" role="dialog" aria-modal="true" aria-label="Conversion Report">
         {/* ── Modal header ── */}
         <div className="rpt-header">
           <div className="rpt-header-left">
@@ -272,7 +288,7 @@ export default function ReportDashboard({ result, sourceDialect, targetDialect, 
               </p>
             </div>
           </div>
-          <button className="rpt-close" onClick={onClose} aria-label="Close report">✕</button>
+          <button ref={closeButtonRef} className="rpt-close" onClick={onClose} aria-label="Close report">✕</button>
         </div>
 
         <div className="rpt-body">

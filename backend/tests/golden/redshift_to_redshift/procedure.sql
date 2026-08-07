@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE analytics.upsert_order(
+CREATE OR REPLACE PROCEDURE "analytics"."upsert_order"(
     IN p_order_id INTEGER,
     IN p_amount VARCHAR(MAX)
 )

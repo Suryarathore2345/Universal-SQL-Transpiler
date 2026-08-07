@@ -40,7 +40,7 @@ export default function WarningsPanel({ warnings = [], unsupported = [] }) {
 
   return (
     <section className="warnings-panel">
-      <button className="panel-toggle" onClick={() => setOpen(o => !o)}>
+      <button className="panel-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
         <span className="panel-title">
           {unsupported.length > 0 && <span className="dot dot-red" />}
           {warnings.length > 0 && unsupported.length === 0 && <span className="dot dot-yellow" />}

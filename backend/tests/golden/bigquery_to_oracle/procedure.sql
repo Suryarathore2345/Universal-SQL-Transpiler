@@ -1,5 +1,5 @@
 CREATE OR REPLACE PROCEDURE "analytics"."upsert_order"(
-    p_order_id IN NUMBER(3),
+    p_order_id IN NUMBER(19),
     p_amount IN NUMBER
 )
 AS

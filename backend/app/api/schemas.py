@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.ir.models import ObjectType
+
 
 # ---------------------------------------------------------------------------
 # Request
@@ -34,10 +36,17 @@ class TranspileRequest(BaseModel):
                      original schema names from the source SQL (Hardcoded mode).
     """
 
-    sql: str = Field(..., min_length=1, description="SQL DDL to transpile")
+    # max_length caps request-body size: without it, a single oversized SQL
+    # payload runs Transpiler.convert (fully synchronous, CPU-bound) inline
+    # on the event loop, blocking the entire server — including its own
+    # /api/health probe — for as long as that one request takes to process.
+    # 2,000,000 characters is generous for legitimate DDL/DML (even a
+    # multi-thousand-column table or a large multi-statement script) while
+    # still bounding worst-case per-request processing time.
+    sql: str = Field(..., min_length=1, max_length=2_000_000, description="SQL DDL to transpile")
     source_dialect: str = Field(..., description="Source dialect key")
     target_dialect: str = Field(..., description="Target dialect key")
-    object_type: Optional[str] = Field(None, description="Optional object type hint")
+    object_type: Optional[ObjectType] = Field(None, description="Optional object type hint")
     include_ir: bool = Field(False, description="Include IR snapshot in response")
     target_schema: Optional[str] = Field(None, description="Schema override (Dynamic mode)")
 

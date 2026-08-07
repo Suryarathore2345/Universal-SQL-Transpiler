@@ -1,8 +1,8 @@
 # Universal SQL Transpiler (UST)
 
-Convert SQL DDL — tables, views, materialized views, stored procedures, and functions — between **8 cloud and enterprise platforms** with a single click.
+Convert SQL DDL — tables, views, materialized views, stored procedures, and functions — between **9 cloud and enterprise platforms** with a single click.
 
-Supported platforms: **Amazon Redshift · Snowflake · Microsoft SQL Server · Azure Synapse · Microsoft Fabric DW · Databricks · Oracle · BigQuery**
+Supported platforms: **Amazon Redshift · Snowflake · Microsoft SQL Server · Azure Synapse · Microsoft Fabric Data Warehouse · Microsoft Fabric Lakehouse · Databricks · Oracle · BigQuery**
 
 ---
 
@@ -25,14 +25,14 @@ Supported platforms: **Amazon Redshift · Snowflake · Microsoft SQL Server · A
 
 ## Features
 
-- **8 × 8 dialect matrix** — any source to any target, 64 conversion pairs
+- **9 × 9 dialect matrix** — any source to any target, 81 conversion pairs
 - **5 object types** — `TABLE`, `VIEW`, `MATERIALIZED VIEW`, `PROCEDURE`, `FUNCTION`
 - **Intermediate Representation (IR)** — N parsers + N generators; no combinatorial code
 - **Warnings & doc references** — every dropped or changed feature links to the official vendor documentation
 - **Limitations panel** — per-dialect list of known gaps shown in the UI before you even convert
 - **REST API** — FastAPI backend with auto-generated OpenAPI docs
 - **Monaco editor** — VS Code–quality SQL editing with a custom dark theme
-- **Golden-file regression tests** — 954 tests, 320 snapshot files
+- **Golden-file regression tests** — 4,002 tests, 322 snapshot files
 
 ---
 
@@ -190,10 +190,10 @@ npm install
 From the `backend/` directory with the virtual environment active:
 
 ```bash
-# Run all 954 tests
+# Run all 4,002 tests
 pytest
 
-# Run a specific phase
+# Run a specific test file
 pytest tests/test_phase1_redshift_snowflake.py
 pytest tests/test_phase2_all_dialects.py
 pytest tests/test_phase3_procedures.py
@@ -207,16 +207,22 @@ pytest tests/test_phase6_golden.py -v
 pytest tests/test_phase6_golden.py --regen-golden
 ```
 
-**Test counts by phase**
+**Test counts by file**
 
-| Phase | Tests | Covers |
+| File | Tests | Covers |
 |---|---|---|
-| 1 | 30 | Redshift ↔ Snowflake table/view/MV |
-| 2 | 98 | All 8 dialects, tables + views + MVs |
-| 3 | 91 | Stored procedures + functions, 8×8 matrix |
-| 4 | 95 | FastAPI endpoints, HTTP 8×8 matrix |
-| 6 | 640 | Golden-file snapshots (320 pairs × 2 checks) |
-| **Total** | **954** | |
+| `test_phase1_redshift_snowflake.py` | 30 | Redshift ↔ Snowflake table/view/MV |
+| `test_phase2_all_dialects.py` | 98 | All 9 dialects, tables + views + MVs |
+| `test_phase3_procedures.py` | 91 | Stored procedures + functions |
+| `test_phase4_api.py` | 95 | FastAPI endpoints, incl. validation error paths |
+| `test_phase6_golden.py` | 640 | Golden-file snapshots (322 files × 2 checks) |
+| `test_advanced_realworld.py` | 2,169 | Real-world DDL corpus, adversarial/edge cases |
+| `test_comprehensive.py` | 192 | Broad cross-dialect coverage |
+| `test_comprehensive_validation.py` | 185 | Output validation against target-dialect rules |
+| `test_query_transpiler.py` | 48 | SELECT/DML (sqlglot-based query path) |
+| `test_realworld.py` | 414 | Real-world DDL samples |
+| `test_schema_and_create_or_replace.py` | 40 | Schema inference, `CREATE OR REPLACE` / `IF NOT EXISTS` |
+| **Total** | **4,002** | |
 
 ---
 
@@ -284,7 +290,7 @@ Optional query parameter: `?dialect=snowflake`
 
 ### `GET /api/health`
 
-Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded": 8 }`.
+Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded": 9 }`.
 
 **Dialect keys**
 
@@ -295,6 +301,7 @@ Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded"
 | `sqlserver` | Microsoft SQL Server |
 | `synapse` | Azure Synapse Analytics |
 | `fabric_dw` | Microsoft Fabric Data Warehouse |
+| `fabric_lakehouse` | Microsoft Fabric Lakehouse |
 | `databricks` | Databricks (Delta Lake) |
 | `oracle` | Oracle Database |
 | `bigquery` | Google BigQuery |
@@ -312,6 +319,7 @@ Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded"
 | SQL Server | ✅ | ✅ | ⚠️ ² | ✅ | ✅ |
 | Synapse | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Fabric DW | ✅ | ✅ | ❌ ³ | ✅ | ✅ |
+| Fabric Lakehouse | ✅ | ✅ | ✅ ⁵ | ❌ ⁶ | ✅ |
 | Databricks | ✅ | ✅ | ✅ | ⚠️ ⁴ | ✅ |
 | Oracle | ✅ | ✅ | ✅ | ✅ | ✅ |
 | BigQuery | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -319,7 +327,9 @@ Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded"
 ¹ Requires Enterprise Edition or higher.  
 ² Converted to indexed view with `WITH SCHEMABINDING` — query may need adjustments.  
 ³ Converted to a regular VIEW — no automatic refresh.  
-⁴ Converted to a SQL UDF stub — significant manual adaptation required.
+⁴ Converted to a SQL UDF stub — significant manual adaptation required.  
+⁵ Materialized Lake Views (MLV) require Fabric Runtime 1.3+.  
+⁶ No stored procedures on Spark SQL — converted to a SQL function stub; use a Fabric Notebook for real procedural logic.
 
 ### Key per-target limitations
 
@@ -356,23 +366,33 @@ universal-sql-transpiler/
 │   │   │   ├── sqlserver/
 │   │   │   ├── synapse/
 │   │   │   ├── fabric_dw/
+│   │   │   ├── fabric_lakehouse/
 │   │   │   ├── databricks/
 │   │   │   ├── oracle/
 │   │   │   └── bigquery/
 │   │   ├── ir/
 │   │   │   └── models.py          # IRTable / IRView / IRProcedure / IRFunction
-│   │   ├── limitations.py         # Static limitations registry (27 entries)
+│   │   ├── sql_text_utils.py      # Shared statement splitter (DDL + query paths)
+│   │   ├── limitations.py         # Static limitations registry
+│   │   ├── validator.py           # Residual pattern scan + confidence scoring
+│   │   ├── query_transpiler.py    # sqlglot-based SELECT/DML path
 │   │   ├── transpiler.py          # Orchestrator: parser → IR → generator
 │   │   └── main.py                # FastAPI app with lifespan + CORS
 │   ├── tests/
 │   │   ├── conftest.py            # --regen-golden flag
-│   │   ├── golden/                # 320 SQL snapshot files
-│   │   ├── golden_samples.py      # Canonical inputs (8 dialects × 5 types)
+│   │   ├── golden/                # SQL snapshot files (see test counts above)
+│   │   ├── golden_samples.py      # Canonical inputs (9 dialects × 5 types)
 │   │   ├── test_phase1_redshift_snowflake.py
 │   │   ├── test_phase2_all_dialects.py
 │   │   ├── test_phase3_procedures.py
 │   │   ├── test_phase4_api.py
-│   │   └── test_phase6_golden.py
+│   │   ├── test_phase6_golden.py
+│   │   ├── test_advanced_realworld.py
+│   │   ├── test_comprehensive.py
+│   │   ├── test_comprehensive_validation.py
+│   │   ├── test_query_transpiler.py
+│   │   ├── test_realworld.py
+│   │   └── test_schema_and_create_or_replace.py
 │   ├── Dockerfile
 │   ├── .dockerignore
 │   └── requirements.txt
@@ -381,10 +401,16 @@ universal-sql-transpiler/
 │   │   ├── api/
 │   │   │   └── transpiler.js      # fetch wrappers for all API calls
 │   │   ├── components/
+│   │   │   ├── ConfidenceBadge.jsx
+│   │   │   ├── DialectLogo.jsx
 │   │   │   ├── DialectSelector.jsx
 │   │   │   ├── DocRefsPanel.jsx
+│   │   │   ├── DownloadMenu.jsx
 │   │   │   ├── LimitationsPanel.jsx
+│   │   │   ├── ReportDashboard.jsx
+│   │   │   ├── SchemaGenModal.jsx
 │   │   │   ├── SqlEditor.jsx      # Monaco editor with ust-dark theme
+│   │   │   ├── UploadButton.jsx
 │   │   │   └── WarningsPanel.jsx
 │   │   ├── styles/index.css       # Dark theme, CSS custom properties
 │   │   └── App.jsx                # Main layout + state
@@ -393,9 +419,12 @@ universal-sql-transpiler/
 │   ├── .dockerignore
 │   ├── vite.config.js
 │   └── package.json
+├── .github/workflows/ci.yml       # Runs backend tests + frontend build on every push/PR
 ├── docker-compose.yml             # backend + frontend services
 ├── setup.ps1                      # Windows one-command setup
 ├── setup.sh                       # Linux/macOS one-command setup
+├── LICENSE
+├── CONTRIBUTING.md
 ├── .gitignore
 └── README.md
 ```

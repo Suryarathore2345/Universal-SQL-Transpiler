@@ -1,4 +1,4 @@
-CREATE TABLE analytics.orders (
+CREATE TABLE "analytics"."orders" (
     "order_id" BIGINT NOT NULL,
     "customer_id" INTEGER NOT NULL,
     "amount" DECIMAL(18,2) NOT NULL,
@@ -7,5 +7,5 @@ CREATE TABLE analytics.orders (
     PRIMARY KEY ("order_id")
 )
 DISTSTYLE KEY
-DISTKEY ("CREATED_AT")
+DISTKEY ("customer_id")
 SORTKEY ("created_at");

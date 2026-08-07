@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE hr.upsert_order(
+CREATE OR REPLACE PROCEDURE "hr"."upsert_order"(
     IN p_order_id VARCHAR(MAX),
     IN p_amount VARCHAR(MAX)
 )

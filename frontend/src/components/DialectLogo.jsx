@@ -7,7 +7,7 @@
 
 function RedshiftLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="rs-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#FF9900"/>
@@ -43,7 +43,7 @@ function SnowflakeLogo({ size = 36 }) {
   }
   const spokes = [0, 60, 120, 180, 240, 300].map(spoke)
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="sf-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#29B5E8"/>
@@ -64,7 +64,7 @@ function SnowflakeLogo({ size = 36 }) {
 
 function SQLServerLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="sql-grad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#E8423F"/>
@@ -85,7 +85,7 @@ function SQLServerLogo({ size = 36 }) {
 
 function SynapseLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="syn-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#8764B8"/>
@@ -109,7 +109,7 @@ function SynapseLogo({ size = 36 }) {
 
 function FabricDWLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="fab-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#00D4A8"/>
@@ -143,9 +143,27 @@ function FabricDWLogo({ size = 36 }) {
   )
 }
 
+function FabricLakehouseLogo({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="lh-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#33E8C8"/>
+          <stop offset="100%" stopColor="#00838A"/>
+        </linearGradient>
+      </defs>
+      {/* Fabric Lakehouse — layered data "lake" with a droplet, distinct from
+          the Fabric DW ribbon mark while staying in the Fabric teal family */}
+      <path d="M20 4 C24 10 30 16 30 22 C30 27.5 25.5 32 20 32 C14.5 32 10 27.5 10 22 C10 16 16 10 20 4 Z" fill="url(#lh-grad)" opacity="0.9"/>
+      <path d="M8 26 L16 22 L24 25 L32 20 L32 30 L8 34 Z" fill="#0D1117" opacity="0.35"/>
+      <path d="M8 32 L16 28 L24 31 L32 26 L32 30 L8 34 Z" fill="#33E8C8" opacity="0.6"/>
+    </svg>
+  )
+}
+
 function DatabricksLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="db-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#FF6B47"/>
@@ -167,7 +185,7 @@ function DatabricksLogo({ size = 36 }) {
 
 function OracleLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="ora-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#F80000"/>
@@ -186,7 +204,7 @@ function OracleLogo({ size = 36 }) {
 
 function BigQueryLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="bq-grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#4285F4"/>
@@ -210,21 +228,22 @@ function BigQueryLogo({ size = 36 }) {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 const LOGO_MAP = {
-  redshift:   RedshiftLogo,
-  snowflake:  SnowflakeLogo,
-  sqlserver:  SQLServerLogo,
-  synapse:    SynapseLogo,
-  fabric_dw:  FabricDWLogo,
-  databricks: DatabricksLogo,
-  oracle:     OracleLogo,
-  bigquery:   BigQueryLogo,
+  redshift:         RedshiftLogo,
+  snowflake:        SnowflakeLogo,
+  sqlserver:        SQLServerLogo,
+  synapse:          SynapseLogo,
+  fabric_dw:        FabricDWLogo,
+  fabric_lakehouse: FabricLakehouseLogo,
+  databricks:       DatabricksLogo,
+  oracle:           OracleLogo,
+  bigquery:         BigQueryLogo,
 }
 
 export default function DialectLogo({ dialectKey, size = 36 }) {
   const Logo = LOGO_MAP[dialectKey]
   if (!Logo) {
     return (
-      <svg width={size} height={size} viewBox="0 0 40 40">
+      <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
         <rect x="4" y="4" width="32" height="32" rx="6" fill="#30363d"/>
         <text x="20" y="26" textAnchor="middle" fontSize="14" fill="#8b949e" fontFamily="system-ui">DB</text>
       </svg>

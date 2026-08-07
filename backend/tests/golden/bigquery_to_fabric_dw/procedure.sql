@@ -1,5 +1,5 @@
 CREATE OR ALTER PROCEDURE [analytics].[upsert_order](
-    @p_order_id SMALLINT,
+    @p_order_id BIGINT,
     @p_amount DECIMAL
 )
 AS

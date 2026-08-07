@@ -8,6 +8,6 @@ CREATE TABLE [analytics].[orders] (
 )
 WITH
 (
-    DISTRIBUTION = HASH([CREATED_AT]),
+    DISTRIBUTION = HASH([customer_id]),
     CLUSTERED COLUMNSTORE INDEX
 );

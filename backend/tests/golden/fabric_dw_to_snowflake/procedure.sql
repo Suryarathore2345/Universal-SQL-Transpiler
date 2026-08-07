@@ -1,4 +1,4 @@
-CREATE PROCEDURE dbo.upsert_order()
+CREATE PROCEDURE "dbo"."upsert_order"()
 RETURNS VARIANT
 LANGUAGE SQL
 AS

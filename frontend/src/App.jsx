@@ -182,7 +182,7 @@ export default function App() {
               <h1 className="logo-title">Universal SQL Transpiler</h1>
               <p className="logo-sub">
                 Convert DDL between Redshift · Snowflake · SQL Server · Synapse ·
-                Fabric DW · Databricks · Oracle · BigQuery
+                Fabric DW · Fabric Lakehouse · Databricks · Oracle · BigQuery
               </p>
             </div>
           </div>

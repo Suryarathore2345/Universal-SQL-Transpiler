@@ -178,6 +178,7 @@ class FabricLakehouseParser(DialectParser):
         is_external = "EXTERNAL" in raw_sql.upper()
 
         columns, pk, fks, uniques, checks = [], None, [], [], []
+        inline_pk_cols: List[str] = []
         schema_expr = node.args.get("this")
         if schema_expr and hasattr(schema_expr, "expressions"):
             for expr in schema_expr.expressions:
@@ -186,8 +187,20 @@ class FabricLakehouseParser(DialectParser):
                     columns.append(col)
                     warnings.extend(w)
                     doc_refs.extend(d)
+                    # Inline column-level PRIMARY KEY (e.g. `id BIGINT
+                    # PRIMARY KEY`) is a separate constraint kind from the
+                    # table-level `PRIMARY KEY (col, ...)` clause handled
+                    # below — without this check it was silently dropped.
+                    if any(
+                        isinstance(c.kind if hasattr(c, "kind") else c, exp.PrimaryKeyColumnConstraint)
+                        for c in expr.constraints
+                    ):
+                        inline_pk_cols.append(col.name)
                 elif isinstance(expr, exp.PrimaryKey):
                     pk = IRPrimaryKey(columns=[c.name for c in expr.expressions])
+
+        if pk is None and inline_pk_cols:
+            pk = IRPrimaryKey(columns=inline_pk_cols)
 
         partition_by = self._extract_partition(raw_sql)
         cluster_by = self._extract_cluster_by(raw_sql)

@@ -1,0 +1,13 @@
+# Test-only dependencies — install in addition to requirements.txt to run
+# the test suite (`pip install -r requirements.txt -r requirements-dev.txt`).
+# These were previously present in the developer's local .venv but not
+# declared anywhere, so a clean checkout following requirements.txt alone
+# had no way to know it also needed pytest to run `pytest`.
+-r requirements.txt
+
+pytest==9.0.3
+httpx==0.28.1
+httpcore==1.0.9
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0

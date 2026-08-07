@@ -50,6 +50,9 @@ export default function SqlEditor({
           <span className="spinner" />
         </div>
       )}
+      {!loading && placeholder && !value && (
+        <div className="editor-placeholder" aria-hidden="true">{placeholder}</div>
+      )}
       <Editor
         height="100%"
         defaultLanguage="sql"

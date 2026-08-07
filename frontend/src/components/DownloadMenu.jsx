@@ -60,12 +60,18 @@ export default function DownloadMenu({ allSql, objects = [], sourceDialect, targ
 
   return (
     <div className="download-menu" ref={ref}>
-      <button className="btn-download" onClick={() => setOpen(o => !o)} title="Download converted SQL">
+      <button
+        className="btn-download"
+        onClick={() => setOpen(o => !o)}
+        title="Download converted SQL"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
         ⭳ Download
       </button>
       {open && (
-        <div className="download-dropdown">
-          <button className="download-item" onClick={handleDownloadAll}>
+        <div className="download-dropdown" role="menu">
+          <button className="download-item" role="menuitem" onClick={handleDownloadAll}>
             <span>All statements</span>
             <span className="download-item-count">{objects.length || ''}</span>
           </button>
@@ -74,6 +80,7 @@ export default function DownloadMenu({ allSql, objects = [], sourceDialect, targ
             <button
               key={type}
               className="download-item"
+              role="menuitem"
               onClick={() => handleDownloadType(type, items)}
             >
               <span>{TYPE_LABELS[type] ?? type}</span>

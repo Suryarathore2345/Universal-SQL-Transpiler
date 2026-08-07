@@ -201,12 +201,16 @@ class RedshiftGenerator(DialectGenerator):
         return "", [], []
 
     def _qualified_name(self, obj) -> str:
+        # Quote every segment — an unquoted name here would silently
+        # lowercase a mixed/upper-case source identifier under Redshift's
+        # unquoted-identifier folding rules, changing the actual object
+        # name from what the source SQL specified.
         parts = []
         if obj.database_name:
-            parts.append(obj.database_name)
+            parts.append(self._quote_identifier(obj.database_name))
         if obj.schema_name:
-            parts.append(obj.schema_name)
-        parts.append(obj.name)
+            parts.append(self._quote_identifier(obj.schema_name))
+        parts.append(self._quote_identifier(obj.name))
         return ".".join(parts)
 
     # -------------------------------------------------------------------------
@@ -326,10 +330,12 @@ class RedshiftGenerator(DialectGenerator):
         return sql, [IRWarning(feature="FUNCTION_MANUAL_REVIEW", message="UDF body requires manual review. Redshift supports Python (plpythonu) and SQL UDFs.", severity=Warningseverity.WARNING)], doc_refs
 
     def _qualified_name(self, obj) -> str:
+        # Quote every segment — see the identical note on the other
+        # _qualified_name definition above.
         parts = []
-        if getattr(obj, "database_name", None): parts.append(obj.database_name)
-        if getattr(obj, "schema_name", None): parts.append(obj.schema_name)
-        parts.append(obj.name)
+        if getattr(obj, "database_name", None): parts.append(self._quote_identifier(obj.database_name))
+        if getattr(obj, "schema_name", None): parts.append(self._quote_identifier(obj.schema_name))
+        parts.append(self._quote_identifier(obj.name))
         return ".".join(parts)
 
     def _distribution_clause_from_dist(self, dist) -> Tuple[str, list, list]:

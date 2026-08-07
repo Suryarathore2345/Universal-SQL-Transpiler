@@ -1,4 +1,4 @@
-CREATE TABLE dbo.orders (
+CREATE TABLE "dbo"."orders" (
     "order_id" BIGINT NOT NULL,
     "customer_id" INTEGER NOT NULL,
     "amount" DECIMAL(18,2) NOT NULL,

@@ -283,8 +283,15 @@ class FabricLakehouseGenerator(DialectGenerator):
         Spark SQL (Fabric Lakehouse) does NOT support stored procedures.
         Docs: https://learn.microsoft.com/en-us/fabric/data-engineering/author-notebook-python
 
-        Emit a commented-out stub with a clear migration guide.
+        Fallback: emit as a syntactically valid, executable no-op SQL
+        function stub (matching the Databricks generator's equivalent
+        fallback — both are Spark SQL) rather than a comment-only block.
+        A comment-only "statement" is not valid SQL at all and cannot be
+        deployed/tested even as a harmless placeholder; a real CREATE
+        FUNCTION at least gives the user something that runs while they
+        migrate the logic to a Fabric Notebook.
         """
+        from app.dialects.procedure_utils import format_param_databricks, format_body_comment
         doc_refs = [IRDocReference(
             title="Fabric Lakehouse — no stored procedures (use Notebooks)",
             url="https://learn.microsoft.com/en-us/fabric/data-engineering/author-notebook-python",
@@ -292,14 +299,21 @@ class FabricLakehouseGenerator(DialectGenerator):
             purpose="Procedure-to-notebook migration reference",
         )]
         qname = self._qualified_name(proc)
+        params_str = ", ".join(format_param_databricks(p, self.mapper, self.dialect) for p in proc.parameters)
+        or_replace = "OR REPLACE " if proc.or_replace else ""
+        body_comment = format_body_comment(proc.language or "unknown", "fabric_lakehouse", proc.language)
         sql = (
             f"-- Fabric Lakehouse / Spark SQL does NOT support CREATE PROCEDURE.\n"
             f"-- Docs: https://learn.microsoft.com/en-us/fabric/data-engineering/author-notebook-python\n"
             f"-- Migration: Convert this procedure to a Fabric Notebook (Python/PySpark).\n"
-            f"-- Original procedure name: {qname}\n"
-            f"-- Original body preserved below as comments for manual conversion:\n"
-            f"--\n"
-            + "\n".join(f"-- {line}" for line in proc.body.splitlines())
+            f"CREATE {or_replace}FUNCTION {qname}({params_str})\n"
+            f"RETURNS STRING\n"
+            f"RETURN (\n"
+            f"  -- {body_comment}\n"
+            f"  -- Original body preserved below — NOT executable as-is:\n"
+            f"  -- {proc.body.replace(chr(10), chr(10) + '  -- ')}\n"
+            f"  NULL\n"
+            f");"
         )
         return sql, [IRWarning(
             feature="PROCEDURE_NOT_SUPPORTED_FABRIC_LAKEHOUSE",
