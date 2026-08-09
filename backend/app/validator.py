@@ -31,7 +31,12 @@ from app.ir.models import IRWarning, Warningseverity
 # ---------------------------------------------------------------------------
 
 _DOLLAR_QUOTE  = re.compile(r'\$\$.*?\$\$', re.DOTALL)
-_BEGIN_END     = re.compile(r'\bBEGIN\b.*?\bEND\b\s*;', re.DOTALL | re.IGNORECASE)
+# Oracle procedures/functions/triggers close with `END <name>;`, not a bare
+# `END;` — the optional `(?:\s+\w+)?` accounts for that trailing identifier,
+# otherwise an Oracle body's closing END never matches and the whole body
+# (e.g. a trigger's pass-through T-SQL ISNULL() calls) leaks into the
+# residual scan unstripped.
+_BEGIN_END     = re.compile(r'\bBEGIN\b.*?\bEND\b(?:\s+\w+)?\s*;', re.DOTALL | re.IGNORECASE)
 _RETURN_CLAUSE = re.compile(r'\bRETURN\b[^;]+;', re.DOTALL | re.IGNORECASE)
 # BigQuery / SQL functions wrapped in  AS (\n   ...\n);
 _AS_PAREN_BODY = re.compile(r'\bAS\s*\(\n[\s\S]*?\n\s*\)\s*;', re.MULTILINE)
