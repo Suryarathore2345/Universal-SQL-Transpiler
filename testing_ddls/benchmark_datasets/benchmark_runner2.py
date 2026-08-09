@@ -84,7 +84,7 @@ def _strip_procedure_bodies(sql):
     are intentionally passed through untranslated, so spot-checks must not
     flag source-dialect syntax that only appears inside them."""
     sql = re.sub(r'\$\$.*?\$\$', ' ', sql, flags=re.DOTALL)
-    sql = re.sub(r'\bBEGIN\b.*?\bEND\b\s*;', ' ', sql, flags=re.DOTALL | re.IGNORECASE)
+    sql = re.sub(r'\bBEGIN\b.*?\bEND\b(?:\s+\w+)?\s*;', ' ', sql, flags=re.DOTALL | re.IGNORECASE)
     sql = re.sub(r'\bAS\s*\(\n[\s\S]*?\n\s*\)\s*;', 'AS ();', sql, flags=re.MULTILINE)
     sql = re.sub(r'r""".*?"""', ' ', sql, flags=re.DOTALL)
     sql = re.sub(r'\bRETURN\b[^;]+;', ' ', sql, flags=re.DOTALL | re.IGNORECASE)
