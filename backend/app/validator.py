@@ -21,6 +21,7 @@ import re
 from typing import Dict, List, Optional, Set, Tuple
 
 from app.ir.models import IRWarning, Warningseverity
+from app.sql_text_utils import _BLOCK_OPENERS, _END_NOOP_SUFFIXES, _WORD_CHAR
 
 
 # ---------------------------------------------------------------------------
@@ -31,12 +32,6 @@ from app.ir.models import IRWarning, Warningseverity
 # ---------------------------------------------------------------------------
 
 _DOLLAR_QUOTE  = re.compile(r'\$\$.*?\$\$', re.DOTALL)
-# Oracle procedures/functions/triggers close with `END <name>;`, not a bare
-# `END;` — the optional `(?:\s+\w+)?` accounts for that trailing identifier,
-# otherwise an Oracle body's closing END never matches and the whole body
-# (e.g. a trigger's pass-through T-SQL ISNULL() calls) leaks into the
-# residual scan unstripped.
-_BEGIN_END     = re.compile(r'\bBEGIN\b.*?\bEND\b(?:\s+\w+)?\s*;', re.DOTALL | re.IGNORECASE)
 _RETURN_CLAUSE = re.compile(r'\bRETURN\b[^;]+;', re.DOTALL | re.IGNORECASE)
 # BigQuery / SQL functions wrapped in  AS (\n   ...\n);
 _AS_PAREN_BODY = re.compile(r'\bAS\s*\(\n[\s\S]*?\n\s*\)\s*;', re.MULTILINE)
@@ -48,6 +43,167 @@ _JS_TRIPLE     = re.compile(r'r""".*?"""', re.DOTALL)
 # SQL line comments (-- ...) — strip to avoid false positives from commented-out
 # source code (e.g. Oracle procedure bodies emitted as comment lines in Spark/Databricks)
 _LINE_COMMENTS = re.compile(r'--[^\n]*')
+# Optional trailing `name;` (Oracle's `END proc_name;`) or bare `;` after a
+# closing END, consumed once the matching top-level span has been found.
+_TRAILING_NAME_SEMI = re.compile(r'(?:\s+\w+)?\s*;')
+
+
+def _find_top_level_begin_end_spans(sql: str) -> List[Tuple[int, int]]:
+    """
+    Locate each outermost BEGIN...END block, depth-aware.
+
+    A naive non-greedy `BEGIN...END` regex lands on the *first* END it
+    finds — which, for a body with a nested block (e.g. an outer BEGIN
+    wrapping an inner `IF ... BEGIN ... END` with no trailing semicolon),
+    is an inner END, not the outer one. Everything after that inner END
+    (the rest of the outer procedure body, which may contain source-dialect
+    syntax such as ISNULL()) then leaks past body-stripping into the
+    residual scanner as ordinary SQL, producing a spurious residual warning
+    even though the transpiled output itself is correct.
+
+    Mirrors the BEGIN/CASE/END depth tracking in
+    sql_text_utils.split_statements (same quote/comment/dollar-quote
+    awareness) so a `;` or nested block inside the body can't be mistaken
+    for the outer END. Returns (start, end) offsets — end is just past the
+    closing END (or END CASE) keyword; any trailing `name;`/`;` is resolved
+    separately by the caller via _TRAILING_NAME_SEMI.
+    """
+    spans: List[Tuple[int, int]] = []
+    block_stack: List[str] = []
+    pending_end = False
+    pending_end_end = 0
+    outer_start: Optional[int] = None
+    in_single = False
+    in_double = False
+    in_line_comment = False
+    in_block_comment = False
+    dollar_tag: Optional[str] = None
+    word_start: Optional[int] = None
+    i = 0
+    n = len(sql)
+
+    def resolve_word(word: str, w_start: int, w_end: int) -> None:
+        nonlocal pending_end, pending_end_end, outer_start
+        upper = word.upper()
+        if pending_end:
+            pending_end = False
+            if upper in _END_NOOP_SUFFIXES:
+                return  # "END IF" / "END LOOP" / "END WHILE" — untracked opener, no-op
+            if upper == "CASE":
+                if block_stack:
+                    block_stack.pop()
+                    if not block_stack and outer_start is not None:
+                        spans.append((outer_start, w_end))
+                        outer_start = None
+                return
+            if block_stack:
+                block_stack.pop()
+                if not block_stack and outer_start is not None:
+                    spans.append((outer_start, pending_end_end))
+                    outer_start = None
+            # Fall through: `word` itself may also be a fresh keyword.
+        if upper == "END":
+            pending_end = True
+            pending_end_end = w_end
+            return
+        if upper in _BLOCK_OPENERS:
+            if not block_stack:
+                outer_start = w_start
+            block_stack.append(upper)
+
+    def flush_pending_end() -> None:
+        """Resolve a still-pending bare END (e.g. "END;" with no suffix word)."""
+        nonlocal pending_end, outer_start
+        if pending_end:
+            pending_end = False
+            if block_stack:
+                block_stack.pop()
+                if not block_stack and outer_start is not None:
+                    spans.append((outer_start, pending_end_end))
+                    outer_start = None
+
+    while i < n:
+        ch = sql[i]
+        nch = sql[i + 1] if i + 1 < n else ""
+
+        if dollar_tag is not None:
+            closing = f"${dollar_tag}$"
+            if sql[i:i + len(closing)] == closing:
+                i += len(closing)
+                dollar_tag = None
+                continue
+            i += 1
+            continue
+
+        if (not in_single and not in_double and not in_line_comment
+                and not in_block_comment and ch == "$"):
+            m = re.match(r'\$(\w*)\$', sql[i:])
+            if m:
+                i += len(m.group(0))
+                dollar_tag = m.group(1)
+                continue
+
+        is_plain = (not in_single and not in_double and not in_line_comment
+                    and not in_block_comment)
+
+        if is_plain and _WORD_CHAR.match(ch):
+            if word_start is None:
+                word_start = i
+            i += 1
+            continue
+        elif word_start is not None:
+            resolve_word(sql[word_start:i], word_start, i)
+            word_start = None
+
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+            i += 1
+        elif in_block_comment:
+            if ch == "*" and nch == "/":
+                i += 2
+                continue
+            i += 1
+        elif is_plain and ch == "-" and nch == "-":
+            in_line_comment = True
+            i += 1
+        elif is_plain and ch == "/" and nch == "*":
+            in_block_comment = True
+            i += 1
+        elif ch == "'" and not in_double:
+            in_single = not in_single
+            i += 1
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+            i += 1
+        elif ch == ";" and not in_single and not in_double:
+            flush_pending_end()
+            i += 1
+        else:
+            i += 1
+
+    if word_start is not None:
+        resolve_word(sql[word_start:n], word_start, n)
+    flush_pending_end()
+
+    return spans
+
+
+def _strip_begin_end_blocks(sql: str) -> str:
+    """Replace each outermost BEGIN...END block (see above) with a space."""
+    spans = _find_top_level_begin_end_spans(sql)
+    if not spans:
+        return sql
+    out: List[str] = []
+    last = 0
+    for start, end in spans:
+        trailing = _TRAILING_NAME_SEMI.match(sql, end)
+        final_end = trailing.end() if trailing else end
+        out.append(sql[last:start])
+        out.append(' ')
+        last = final_end
+    out.append(sql[last:])
+    return ''.join(out)
 
 
 def _strip_procedure_bodies(sql: str) -> str:
@@ -66,8 +222,9 @@ def _strip_procedure_bodies(sql: str) -> str:
     """
     # 1. Dollar-quoted blocks: $$ ... $$
     sql = _DOLLAR_QUOTE.sub(' ', sql)
-    # 2. T-SQL / BigQuery Scripting: BEGIN ... END;
-    sql = _BEGIN_END.sub(' ', sql)
+    # 2. T-SQL / BigQuery Scripting: BEGIN ... END;  (nesting-aware — see
+    #    _find_top_level_begin_end_spans for why a plain regex under-strips)
+    sql = _strip_begin_end_blocks(sql)
     # 3. BigQuery SQL UDF: AS ( ... );   (must run after BEGIN...END so nested
     #    AS clauses inside procedures are already stripped)
     sql = _AS_PAREN_BODY.sub('AS ();', sql)
