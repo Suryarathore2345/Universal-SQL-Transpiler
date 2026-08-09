@@ -13,5 +13,6 @@ AS (
 --   5. Dialect-specific built-in functions
 -- ============================================================
   BEGIN
-    RETURN @amount * 1.1
+    RETURN @amount * 1.1;
+END
 );

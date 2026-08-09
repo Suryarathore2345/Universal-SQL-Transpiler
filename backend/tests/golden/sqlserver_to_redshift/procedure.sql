@@ -16,5 +16,6 @@ AS $$
 -- ============================================================
 BEGIN
     INSERT INTO dbo.orders(order_id, amount)
-    VALUES (@p_order_id, @p_amount)
+    VALUES (@p_order_id, @p_amount);
+END
 $$;

@@ -13,5 +13,6 @@ RETURN (
 --   5. Dialect-specific built-in functions
 -- ============================================================
   BEGIN
-    RETURN p_amount * 1.1
+    RETURN p_amount * 1.1;
+END apply_tax
 );

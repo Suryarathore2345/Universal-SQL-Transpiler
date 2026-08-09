@@ -14,11 +14,6 @@ BEGIN
 --   4. Transaction control
 --   5. Dialect-specific built-in functions
 -- ============================================================
-CREATE OR REPLACE PROCEDURE `analytics.upsert_order`(
-    IN p_order_id INT64,
-    IN p_amount   NUMERIC
-)
-BEGIN
-    INSERT INTO `analytics.orders`(order_id, amount)
-    VALUES (p_order_id, p_amount)
+INSERT INTO `analytics.orders`(order_id, amount)
+    VALUES (p_order_id, p_amount);
 END;

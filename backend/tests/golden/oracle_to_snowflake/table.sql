@@ -3,5 +3,6 @@ CREATE TABLE "hr"."orders" (
     "customer_id" NUMBER(10) NOT NULL,
     "amount" NUMBER(18,2) NOT NULL,
     "status" VARCHAR(32) DEFAULT 'pending',
-    "created_at" TIMESTAMP_NTZ NOT NULL
+    "created_at" TIMESTAMP_NTZ NOT NULL,
+    CONSTRAINT pk_orders PRIMARY KEY ("order_id")
 );

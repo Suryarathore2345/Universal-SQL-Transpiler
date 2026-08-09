@@ -3,7 +3,8 @@ CREATE TABLE [hr].[orders] (
     [customer_id] DECIMAL(10) NOT NULL,
     [amount] DECIMAL(18,2) NOT NULL,
     [status] VARCHAR(32) DEFAULT 'pending',
-    [created_at] DATETIME2 NOT NULL
+    [created_at] DATETIME2 NOT NULL,
+    CONSTRAINT [pk_orders] PRIMARY KEY NONCLUSTERED ([order_id]) NOT ENFORCED
 )
 WITH
 (

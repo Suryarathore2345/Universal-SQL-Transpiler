@@ -18,6 +18,7 @@ RETURN (
   -- Original body preserved below — NOT executable as-is:
   -- BEGIN
   --     INSERT INTO hr.orders(order_id, amount)
-  --     VALUES (p_order_id, p_amount)
+  --     VALUES (p_order_id, p_amount);
+  -- END upsert_order
   NULL
 );

@@ -16,12 +16,7 @@ RETURN (
 --   5. Dialect-specific built-in functions
 -- ============================================================
   -- Original body preserved below — NOT executable as-is:
-  -- CREATE OR REPLACE PROCEDURE `analytics.upsert_order`(
-  --     IN p_order_id INT64,
-  --     IN p_amount   NUMERIC
-  -- )
-  -- BEGIN
-  --     INSERT INTO `analytics.orders`(order_id, amount)
-  --     VALUES (p_order_id, p_amount)
+  -- INSERT INTO `analytics.orders`(order_id, amount)
+  --     VALUES (p_order_id, p_amount);
   NULL
 );
