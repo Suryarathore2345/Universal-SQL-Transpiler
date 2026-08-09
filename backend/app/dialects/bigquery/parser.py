@@ -27,7 +27,7 @@ from typing import List, Optional, Tuple
 import sqlglot
 import sqlglot.expressions as exp
 
-from app.dialects.base import DialectParser
+from app.dialects.base import DialectParser, run_with_timeout
 from app.ir.models import (
     Dialect, IRCheckConstraint, IRClusterBy, IRColumn, IRDataType, IRDDLObject,
     IRDocReference, IRForeignKey, IRFunction, IRMaterializedView, IRPartition,
@@ -51,7 +51,7 @@ class BigQueryParser(DialectParser):
         doc_refs: List[IRDocReference] = []
 
         try:
-            parsed = sqlglot.parse_one(sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
+            parsed = run_with_timeout(sqlglot.parse_one, sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
         except Exception as e:
             warnings.append(IRWarning(feature="PARSE_ERROR", message=str(e), severity=Warningseverity.ERROR))
             return None, warnings, doc_refs
@@ -134,6 +134,29 @@ class BigQueryParser(DialectParser):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
                 elif isinstance(expr, exp.Check):
                     checks.append(IRCheckConstraint(expression=expr.this.sql() if expr.this else ""))
+                elif isinstance(expr, exp.Constraint):
+                    cname = expr.name
+                    for sub in expr.expressions:
+                        if isinstance(sub, exp.PrimaryKey):
+                            pk = IRPrimaryKey(name=cname, columns=[c.name for c in sub.expressions])
+                        elif isinstance(sub, exp.ForeignKey):
+                            ref = sub.args.get("reference")
+                            ref_tbl = "unknown"
+                            ref_sch = None
+                            ref_cols: list = []
+                            if ref and ref.this:
+                                rthis = ref.this
+                                ref_tbl = getattr(rthis.this, "name", None) or getattr(rthis, "name", None) or "unknown"
+                                ref_sch = getattr(rthis.this, "db", None) if hasattr(rthis, "this") else None
+                                ref_cols = [c.name for c in getattr(rthis, "expressions", [])]
+                            fks.append(IRForeignKey(name=cname, columns=[c.name for c in sub.expressions], ref_table=ref_tbl, ref_schema=ref_sch, ref_columns=ref_cols))
+                        elif isinstance(sub, exp.UniqueColumnConstraint):
+                            ucols = [c.name for c in sub.expressions] if sub.expressions else []
+                            if not ucols and sub.this and hasattr(sub.this, "expressions"):
+                                ucols = [c.name for c in sub.this.expressions]
+                            uniques.append(IRUniqueConstraint(name=cname, columns=ucols))
+                        elif isinstance(sub, (exp.Check, exp.CheckColumnConstraint)):
+                            checks.append(IRCheckConstraint(name=cname, expression=sub.this.sql() if sub.this else ""))
 
         if pk is None and inline_pk_cols:
             pk = IRPrimaryKey(columns=inline_pk_cols)

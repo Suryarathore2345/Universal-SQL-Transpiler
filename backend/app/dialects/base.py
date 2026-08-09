@@ -11,16 +11,67 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import yaml
+import sqlglot.expressions as exp
 
 from app.ir.models import (
-    Dialect, GenericType, IRColumn, IRDataType, IRDDLObject, IRDocReference,
-    IRFunction, IRParameter, IRProcedure, IRTable, IRView, IRMaterializedView,
+    Dialect, GenericType, IRCheckConstraint, IRColumn, IRDataType, IRDDLObject,
+    IRDocReference, IRForeignKey, IRFunction, IRParameter, IRPrimaryKey,
+    IRProcedure, IRTable, IRUniqueConstraint, IRView, IRMaterializedView,
     IRWarning, TranspileResult, Warningseverity,
 )
+
+
+# ---------------------------------------------------------------------------
+# Bounded-timeout sqlglot wrapper
+#
+# sqlglot's lenient ErrorLevel.WARN parsing mode — used by every dialect
+# parser to tolerate minor real-world syntax deviations — can enter a
+# genuine infinite loop (not just "slow") on certain ambiguous/malformed
+# inputs (observed: a statement with an unrecoverable duplicate WITH clause
+# hung forever under ErrorLevel.WARN while ErrorLevel.RAISE rejected the
+# same input in <0.03s). Because /api/transpile already offloads the whole
+# request to a worker thread (see api/routes.py), a hang here does not take
+# the whole server down for OTHER requests — but it does hang the ONE
+# request forever, silently consuming a thread-pool slot permanently.
+# Wrapping every sqlglot.parse_one()/transpile() call through a bounded
+# timeout turns that permanent hang into a fast, graceful PARSE_ERROR/
+# warning — the same outcome as any other unparseable input — at the cost
+# of leaking one background thread per timeout (rare in practice; only
+# triggered by genuinely pathological input, not normal SQL).
+# ---------------------------------------------------------------------------
+
+_SQLGLOT_WATCHDOG_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="sqlglot-watchdog")
+SQLGLOT_PARSE_TIMEOUT_SECONDS = 10.0
+
+
+class SqlglotParseTimeout(Exception):
+    """Raised when a sqlglot call exceeds SQLGLOT_PARSE_TIMEOUT_SECONDS."""
+
+
+def run_with_timeout(fn, *args, timeout: float = SQLGLOT_PARSE_TIMEOUT_SECONDS, **kwargs):
+    """
+    Run fn(*args, **kwargs) on a watchdog thread and enforce a wall-clock
+    timeout. Raises SqlglotParseTimeout if it doesn't complete in time.
+
+    Note: Python cannot forcibly kill a running thread, so a timed-out call
+    keeps executing in the background until it naturally finishes or the
+    process exits — this only prevents the CALLER from hanging, it doesn't
+    reclaim the stuck thread. Acceptable here because the trigger (sqlglot
+    WARN-mode recovery looping on unrecoverable ambiguous syntax) is rare.
+    """
+    future = _SQLGLOT_WATCHDOG_POOL.submit(fn, *args, **kwargs)
+    try:
+        return future.result(timeout=timeout)
+    except _FutureTimeoutError:
+        raise SqlglotParseTimeout(
+            f"sqlglot call exceeded {timeout}s timeout — likely malformed/ambiguous "
+            f"input triggering pathological error-recovery parsing."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +388,97 @@ class DialectParser(ABC):
             length=length,
             original_type_string=type_str,
         ), [], []
+
+    @staticmethod
+    def _extract_ordered_columns(nodes: List[Any]) -> List[str]:
+        """
+        Extract column names from a list of sqlglot nodes that may be plain
+        Column/Identifier nodes or Ordered(...) wrappers around them — the
+        shape T-SQL's CLUSTERED/NONCLUSTERED column lists parse into.
+        """
+        cols: List[str] = []
+        for n in nodes:
+            col = n.this if hasattr(n, "this") and not hasattr(n, "name") else n
+            # Ordered wraps a Column; unwrap once more if needed.
+            if hasattr(col, "this") and not hasattr(col, "name"):
+                col = col.this
+            name = getattr(col, "name", None)
+            if name:
+                cols.append(name)
+        return cols
+
+    def _parse_tsql_constraint(
+        self, expr: "exp.Constraint"
+    ) -> Tuple[Optional[IRPrimaryKey], Optional[IRForeignKey], Optional[IRUniqueConstraint], Optional[IRCheckConstraint]]:
+        """
+        Parse a single `CONSTRAINT <name> ...` clause for the T-SQL family
+        (SQL Server / Synapse / Fabric DW), which — unlike the generic
+        ANSI shape other dialects use — splits `PRIMARY KEY CLUSTERED (cols)`
+        / `PRIMARY KEY NONCLUSTERED (cols)` into TWO sibling sub-expressions:
+        an empty exp.PrimaryKeyColumnConstraint (no columns) plus a separate
+        exp.ClusteredColumnConstraint / exp.NonClusteredColumnConstraint that
+        actually holds the column list. `UNIQUE CLUSTERED/NONCLUSTERED (cols)`
+        nests one level deeper instead: exp.UniqueColumnConstraint.this is
+        the Clustered/NonClustered node. Without this, PRIMARY KEY CLUSTERED —
+        the form SQL Server Management Studio generates by default for every
+        PK — parses as a constraint with zero columns and is silently dropped.
+
+        Docs: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-transact-sql
+        Returns (primary_key, foreign_key, unique_constraint, check_constraint) — at most one is non-None.
+        """
+        cname = expr.name or None
+        sub_list = list(expr.expressions)
+
+        has_pk_marker = any(isinstance(s, exp.PrimaryKeyColumnConstraint) for s in sub_list)
+        clustered_sub = next(
+            (s for s in sub_list if isinstance(s, (exp.ClusteredColumnConstraint, exp.NonClusteredColumnConstraint))),
+            None,
+        )
+
+        if has_pk_marker:
+            cols: List[str] = []
+            is_clustered = True
+            if clustered_sub is not None:
+                inner = clustered_sub.this
+                inner_list = inner if isinstance(inner, list) else [inner]
+                cols = self._extract_ordered_columns(inner_list)
+                is_clustered = isinstance(clustered_sub, exp.ClusteredColumnConstraint)
+            else:
+                # Plain `CONSTRAINT name PRIMARY KEY (cols)` without CLUSTERED/NONCLUSTERED
+                pk_node = next((s for s in sub_list if isinstance(s, exp.PrimaryKey)), None)
+                if pk_node is not None:
+                    cols = [c.name for c in pk_node.expressions]
+            return IRPrimaryKey(name=cname, columns=cols, clustered=is_clustered), None, None, None
+
+        for sub in sub_list:
+            if isinstance(sub, exp.PrimaryKey):
+                return IRPrimaryKey(name=cname, columns=[c.name for c in sub.expressions]), None, None, None
+            if isinstance(sub, exp.ForeignKey):
+                ref = sub.args.get("reference")
+                ref_tbl, ref_sch, ref_cols = "unknown", None, []
+                if ref and ref.this:
+                    rthis = ref.this
+                    ref_tbl = getattr(rthis.this, "name", None) or getattr(rthis, "name", None) or "unknown"
+                    ref_sch = getattr(rthis.this, "db", None) if hasattr(rthis, "this") else None
+                    ref_cols = [c.name for c in getattr(rthis, "expressions", [])]
+                return None, IRForeignKey(
+                    name=cname, columns=[c.name for c in sub.expressions],
+                    ref_table=ref_tbl, ref_schema=ref_sch, ref_columns=ref_cols,
+                ), None, None
+            if isinstance(sub, exp.UniqueColumnConstraint):
+                ucols = [c.name for c in sub.expressions] if sub.expressions else []
+                if not ucols and sub.this is not None:
+                    if isinstance(sub.this, (exp.ClusteredColumnConstraint, exp.NonClusteredColumnConstraint)):
+                        inner = sub.this.this
+                        inner_list = inner if isinstance(inner, list) else [inner]
+                        ucols = self._extract_ordered_columns(inner_list)
+                    elif hasattr(sub.this, "expressions"):
+                        ucols = [c.name for c in sub.this.expressions]
+                return None, None, IRUniqueConstraint(name=cname, columns=ucols), None
+            if isinstance(sub, (exp.Check, exp.CheckColumnConstraint)):
+                return None, None, None, IRCheckConstraint(name=cname, expression=sub.this.sql() if sub.this else "")
+
+        return None, None, None, None
 
     def _parse_proc_from_sql(
         self, sql: str, body_style: str = "best_effort"

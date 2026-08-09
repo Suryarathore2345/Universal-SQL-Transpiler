@@ -18,6 +18,7 @@ from sqlglot import errors as sqlglot_errors
 
 from app.ir.models import IRDocReference, IRWarning, ObjectType, Warningseverity
 from app.sql_text_utils import split_statements as _split_statements
+from app.dialects.base import run_with_timeout, SqlglotParseTimeout
 
 # ---------------------------------------------------------------------------
 # Dialect mapping: our dialect keys → sqlglot read/write names
@@ -571,7 +572,8 @@ def transpile_query(
     # Run sqlglot transpilation, collecting parse errors as warnings
     sg_error_msgs: list[str] = []
     try:
-        transpiled_list = sqlglot.transpile(
+        transpiled_list = run_with_timeout(
+            sqlglot.transpile,
             sql,
             read=src_sg,
             write=tgt_sg,
@@ -579,7 +581,7 @@ def transpile_query(
             error_level=sqlglot_errors.ErrorLevel.WARN,
         )
         transpiled = '\n'.join(transpiled_list) if transpiled_list else sql
-    except sqlglot_errors.SqlglotError as e:
+    except (sqlglot_errors.SqlglotError, SqlglotParseTimeout) as e:
         sg_error_msgs.append(str(e))
         transpiled = sql  # passthrough on failure
 

@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple
 import sqlglot
 import sqlglot.expressions as exp
 
-from app.dialects.base import DialectParser
+from app.dialects.base import DialectParser, run_with_timeout
 from app.ir.models import (
     Dialect, DistributionStyle, GenericType, IRAlterTable, IRCheckConstraint,
     IRClusterBy, IRColumn, IRDataType, IRDDLObject, IRDistribution,
@@ -49,7 +49,7 @@ class RedshiftParser(DialectParser):
         sql_upper = sql.strip().upper()
 
         try:
-            parsed = sqlglot.parse_one(sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
+            parsed = run_with_timeout(sqlglot.parse_one, sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
         except Exception as e:
             warnings.append(IRWarning(
                 feature="PARSE_ERROR",
@@ -166,6 +166,22 @@ class RedshiftParser(DialectParser):
                     ))
                 elif isinstance(expr, exp.CheckColumnConstraint):
                     checks.append(IRCheckConstraint(expression=expr.this.sql()))
+                elif isinstance(expr, exp.Constraint):
+                    cname = expr.name
+                    for sub in expr.expressions:
+                        if isinstance(sub, exp.PrimaryKey):
+                            pk = IRPrimaryKey(name=cname, columns=[c.name for c in sub.expressions], not_enforced=True)
+                        elif isinstance(sub, exp.ForeignKey):
+                            fk = self._parse_fk(sub)
+                            fk.name = cname
+                            fks.append(fk)
+                        elif isinstance(sub, exp.UniqueColumnConstraint):
+                            ucols = [c.name for c in sub.expressions] if sub.expressions else []
+                            if not ucols and sub.this and hasattr(sub.this, "expressions"):
+                                ucols = [c.name for c in sub.this.expressions]
+                            uniques.append(IRUniqueConstraint(name=cname, columns=ucols, not_enforced=True))
+                        elif isinstance(sub, (exp.Check, exp.CheckColumnConstraint)):
+                            checks.append(IRCheckConstraint(name=cname, expression=sub.this.sql() if sub.this else ""))
 
         if pk is None and inline_pk_cols:
             pk = IRPrimaryKey(columns=inline_pk_cols, not_enforced=True)

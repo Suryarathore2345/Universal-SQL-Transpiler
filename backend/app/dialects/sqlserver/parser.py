@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple
 import sqlglot
 import sqlglot.expressions as exp
 
-from app.dialects.base import DialectParser
+from app.dialects.base import DialectParser, run_with_timeout
 from app.ir.models import (
     Dialect, GeneratedType, IRCheckConstraint, IRColumn, IRDataType, IRDDLObject,
     IRDocReference, IRForeignKey, IRFunction, IRIdentity, IRMaterializedView,
@@ -41,7 +41,7 @@ class SQLServerParser(DialectParser):
         doc_refs: List[IRDocReference] = []
 
         try:
-            parsed = sqlglot.parse_one(sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
+            parsed = run_with_timeout(sqlglot.parse_one, sql, dialect=self._SQLGLOT_DIALECT, error_level=sqlglot.ErrorLevel.WARN)
         except Exception as e:
             warnings.append(IRWarning(feature="PARSE_ERROR", message=str(e), severity=Warningseverity.ERROR))
             return None, warnings, doc_refs
@@ -122,6 +122,12 @@ class SQLServerParser(DialectParser):
                     ))
                 elif isinstance(expr, exp.UniqueColumnConstraint):
                     uniques.append(IRUniqueConstraint(columns=[c.name for c in expr.expressions]))
+                elif isinstance(expr, exp.Constraint):
+                    c_pk, c_fk, c_uq, c_ck = self._parse_tsql_constraint(expr)
+                    if c_pk is not None: pk = c_pk
+                    if c_fk is not None: fks.append(c_fk)
+                    if c_uq is not None: uniques.append(c_uq)
+                    if c_ck is not None: checks.append(c_ck)
 
         if pk is None and inline_pk_cols:
             pk = IRPrimaryKey(columns=inline_pk_cols)
