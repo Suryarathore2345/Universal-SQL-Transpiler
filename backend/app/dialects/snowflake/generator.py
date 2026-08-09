@@ -19,8 +19,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, GenericType, IRColumn, IRDocReference,
-    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning,
-    RefreshType, Warningseverity,
+    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView,
+    IRWarning, RefreshType, Warningseverity,
 )
 
 
@@ -275,6 +275,46 @@ class SnowflakeGenerator(DialectGenerator):
             message="UDF body requires manual review for Snowflake syntax. "
                     "Docs: https://docs.snowflake.com/en/sql-reference/sql/create-function",
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Snowflake has no CREATE TRIGGER statement (verified against the current
+        SQL command reference). The closest architectural equivalent is a
+        Stream (captures row-level changes on a table) paired with a Task
+        (runs SQL when the stream has data) — an async/polling mechanism,
+        not a synchronous row-level trigger, so this is NOT a mechanical
+        translation and is emitted as a documented stub only.
+        Docs: https://docs.snowflake.com/en/user-guide/tasks-triggered
+        """
+        doc_refs = [IRDocReference(
+            title="Snowflake Streams and Tasks (no native trigger)",
+            url="https://docs.snowflake.com/en/user-guide/tasks-triggered",
+            platform="snowflake",
+            purpose="Trigger unsupported — nearest alternative reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Snowflake does NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://docs.snowflake.com/en/user-guide/tasks-triggered\n"
+            f"-- Nearest equivalent: a STREAM on {trigger.table_name} paired with a TASK\n"
+            f"-- (WHEN SYSTEM$STREAM_HAS_DATA(...) AS <sql>) — async/polling, not a\n"
+            f"-- synchronous row-level trigger. Requires redesigning the logic below.\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_SNOWFLAKE",
+            message="Snowflake has no CREATE TRIGGER statement. The nearest architectural "
+                    "equivalent is a Stream + Task pair, which is asynchronous/polling-based "
+                    "rather than a synchronous row-level trigger — this requires a redesign, "
+                    "not a direct translation, so only a documented stub was generated.",
+            doc_url="https://docs.snowflake.com/en/user-guide/tasks-triggered",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs
 
     def _fk_clause(self, fk) -> str:

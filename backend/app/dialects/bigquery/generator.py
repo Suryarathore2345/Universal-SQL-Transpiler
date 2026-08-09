@@ -17,8 +17,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, IRColumn, IRDocReference, IRFunction,
-    IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning, SortKeyType,
-    Warningseverity,
+    IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView, IRWarning,
+    SortKeyType, Warningseverity,
 )
 
 
@@ -356,4 +356,40 @@ class BigQueryGenerator(DialectGenerator):
             message="UDF body requires manual review for BigQuery SQL/JavaScript function syntax. "
                     "Docs: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_function_statement",
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        BigQuery has no CREATE TRIGGER statement or row-level DML trigger
+        concept — there is no DDL object for it. Change-driven automation
+        is implemented externally (e.g. Cloud Functions/Eventarc reacting
+        to BigQuery audit logs, or scheduled queries).
+        Docs: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
+        """
+        doc_refs = [IRDocReference(
+            title="BigQuery Data Definition Language (no CREATE TRIGGER)",
+            url="https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language",
+            platform="bigquery",
+            purpose="Trigger unsupported reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- BigQuery does NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language\n"
+            f"-- No in-database equivalent exists. Change-driven automation requires an\n"
+            f"-- external mechanism (e.g. Cloud Functions/Eventarc on audit logs, scheduled queries).\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_BIGQUERY",
+            message="BigQuery has no CREATE TRIGGER statement or row-level trigger concept. "
+                    "Change-driven automation requires an external mechanism (Cloud Functions/"
+                    "Eventarc on audit logs, or scheduled queries).",
+            doc_url="https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs

@@ -21,7 +21,7 @@ import sqlglot.expressions as exp
 from app.ir.models import (
     Dialect, GenericType, IRCheckConstraint, IRColumn, IRDataType, IRDDLObject,
     IRDocReference, IRForeignKey, IRFunction, IRParameter, IRPrimaryKey,
-    IRProcedure, IRTable, IRUniqueConstraint, IRView, IRMaterializedView,
+    IRProcedure, IRTable, IRTrigger, IRUniqueConstraint, IRView, IRMaterializedView,
     IRWarning, TranspileResult, Warningseverity,
 )
 
@@ -575,6 +575,68 @@ class DialectParser(ABC):
         )
         return func, warnings, d
 
+    def _parse_trigger_from_sql(
+        self, sql: str, body_style: str = "best_effort"
+    ) -> Tuple[Optional[IRTrigger], List[IRWarning], List[IRDocReference]]:
+        """
+        Shared trigger parser: extract table, timing, events, and body from
+        raw SQL. sqlglot does not AST-parse CREATE TRIGGER in either tsql
+        or oracle (it falls back to an opaque Command/Block), so — like
+        procedures/functions — this is regex-based extraction.
+        body_style: 'tsql' | 'oracle' | 'best_effort'
+        """
+        from app.dialects.procedure_utils import extract_obj_name, extract_body_tsql, extract_body_best_effort
+        from app.dialects.trigger_utils import (
+            extract_trigger_table, extract_trigger_timing, extract_trigger_events,
+            extract_update_of_columns, extract_for_each_row, extract_when_condition,
+            extract_not_for_replication, extract_trigger_body_oracle, _strip_comments,
+        )
+
+        # A comment sitting anywhere before the real header (very common —
+        # see e.g. "-- Calls secure_dml before any DML on EMPLOYEES" in the
+        # Oracle sample schemas) can otherwise be matched by these regexes
+        # instead of the real header text, corrupting the extracted name/
+        # table. extract_obj_name/or_replace detection run against
+        # comment-stripped text for the same reason _trigger_header()
+        # strips comments internally for the other extractors.
+        sql_no_comments = _strip_comments(sql)
+
+        name, schema, db = extract_obj_name(sql_no_comments, "TRIGGER")
+        table_name, table_schema = extract_trigger_table(sql)
+        timing = extract_trigger_timing(sql)
+        events = extract_trigger_events(sql)
+        update_of_columns = extract_update_of_columns(sql)
+        for_each_row = extract_for_each_row(sql)
+        when_condition = extract_when_condition(sql)
+        not_for_replication = extract_not_for_replication(sql)
+        or_replace = bool(re.search(r'\bOR\s+(?:REPLACE|ALTER)\b', sql_no_comments, re.IGNORECASE))
+
+        body_fn = {
+            "tsql": extract_body_tsql,
+            "oracle": extract_trigger_body_oracle,
+            "best_effort": extract_body_best_effort,
+        }.get(body_style, extract_body_best_effort)
+        body = body_fn(sql) or sql
+
+        warnings = [IRWarning(
+            feature="MANUAL_REVIEW_REQUIRED",
+            message="Trigger body has been preserved from the source dialect. "
+                    "The procedural body requires manual review and adaptation: "
+                    "variable declarations, error handling, cursors, and built-in functions "
+                    "differ significantly between SQL dialects.",
+            severity=Warningseverity.WARNING,
+            fallback_applied=False,
+        )]
+        trigger = IRTrigger(
+            name=name, schema_name=schema, database_name=db,
+            table_name=table_name, table_schema=table_schema,
+            timing=timing, events=events, update_of_columns=update_of_columns,
+            for_each_row=for_each_row, when_condition=when_condition,
+            not_for_replication=not_for_replication,
+            body=body, or_replace=or_replace, requires_manual_review=True,
+        )
+        return trigger, warnings, []
+
 
 class DialectGenerator(ABC):
     """
@@ -785,6 +847,33 @@ class DialectGenerator(ABC):
             message=f"Function generated with stub header for {self.dialect.value}. "
                     f"Review parameter types and body syntax.",
             severity=Warningseverity.WARNING,
+        )]
+        return sql, warnings, []
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Generate CREATE TRIGGER statement.
+        Subclasses override for dialect-specific syntax (sqlserver/oracle
+        have real trigger DDL; every other dialect overrides this with a
+        dialect-specific "not supported" stub — see e.g.
+        databricks/generator.py::generate_trigger). This base default only
+        runs if a dialect forgets to override it, so it stays generic.
+        """
+        qname = self._quote_identifier(trigger.name)
+        if trigger.schema_name:
+            qname = f"{self._quote_identifier(trigger.schema_name)}.{qname}"
+        sql = (
+            f"-- {self.dialect.value} does not have a documented trigger generator.\n"
+            f"-- Original trigger '{trigger.name}' ON {trigger.table_name} preserved below for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        warnings = [IRWarning(
+            feature=f"TRIGGER_NOT_SUPPORTED_{self.dialect.value.upper()}",
+            message=f"CREATE TRIGGER generation is not implemented for {self.dialect.value}.",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )]
         return sql, warnings, []
 

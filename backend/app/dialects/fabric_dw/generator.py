@@ -28,7 +28,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, IRColumn, IRDocReference, IRFunction,
-    IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning, Warningseverity,
+    IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView, IRWarning,
+    Warningseverity,
 )
 
 
@@ -404,4 +405,37 @@ class FabricDWGenerator(DialectGenerator):
             feature="FUNCTION_MANUAL_REVIEW",
             message="Function body requires manual review for Fabric DW T-SQL syntax.",
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Fabric DW does NOT support CREATE TRIGGER (verified — see the
+        dialect's own parser docstring, which already lists triggers among
+        unsupported features alongside materialized views and recursive CTEs).
+        Docs: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
+        """
+        doc_refs = [IRDocReference(
+            title="Fabric DW T-SQL Surface Area (no CREATE TRIGGER)",
+            url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area",
+            platform="fabric_dw",
+            purpose="Trigger unsupported reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Fabric DW does NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area\n"
+            f"-- No in-database equivalent exists.\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_FABRIC_DW",
+            message="Fabric DW does not support CREATE TRIGGER, with no in-database "
+                    "alternative.",
+            doc_url="https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs

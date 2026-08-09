@@ -34,7 +34,7 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, GenericType, IRColumn, IRDocReference, IRFunction,
-    IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning,
+    IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView, IRWarning,
     Warningseverity,
 )
 
@@ -384,4 +384,36 @@ class FabricLakehouseGenerator(DialectGenerator):
                 "Docs: https://spark.apache.org/docs/latest/sql-ref-syntax-ddl-create-function.html"
             ),
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Fabric Lakehouse (Spark SQL on Delta Lake) has no CREATE TRIGGER
+        statement or row-level DML trigger concept.
+        Docs: https://spark.apache.org/docs/latest/sql-ref-syntax-ddl.html
+        """
+        doc_refs = [IRDocReference(
+            title="Spark SQL DDL Statements (no CREATE TRIGGER)",
+            url="https://spark.apache.org/docs/latest/sql-ref-syntax-ddl.html",
+            platform="fabric_lakehouse",
+            purpose="Trigger unsupported reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Fabric Lakehouse (Spark SQL / Delta Lake) does NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://spark.apache.org/docs/latest/sql-ref-syntax-ddl.html\n"
+            f"-- No in-database equivalent exists; consider a Delta Live Tables/CDC pipeline.\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_FABRIC_LAKEHOUSE",
+            message="Fabric Lakehouse (Spark SQL) has no CREATE TRIGGER statement or "
+                    "row-level trigger concept. Consider a Delta Live Tables/CDC pipeline.",
+            doc_url="https://spark.apache.org/docs/latest/sql-ref-syntax-ddl.html",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs

@@ -8,6 +8,7 @@ Official docs used:
   PARTITION BY:     https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-TABLE.html#GUID-F9CE0CC3-13AE-4744-A43C-EAC7A71AAAB6
   CREATE VIEW:      https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-VIEW.html
   CREATE MV:        https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-MATERIALIZED-VIEW.html
+  CREATE TRIGGER:   https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html
 
 Key Oracle DDL facts:
   - NUMBER(p, s) for all numeric types (no INT alias behavior in stored form)
@@ -86,6 +87,24 @@ class OracleParser(DialectParser):
         if re.search(r'\bCREATE\b.*?\bFUNCTION\b', sql, re.IGNORECASE | re.DOTALL):
             r, w, d = self._parse_func_from_sql(sql, body_style="oracle")
             return r, warnings + w, d
+        if re.search(r'\bCREATE\b(?:\s+OR\s+REPLACE)?\s+TRIGGER\b', sql, re.IGNORECASE):
+            # sqlglot does not AST-parse CREATE TRIGGER in oracle (falls back
+            # to an opaque Command/Block), so this is regex-fallback only —
+            # same treatment as PROCEDURE/FUNCTION above.
+            if re.search(r'\bON\s+(?:DATABASE|SCHEMA)\b', sql, re.IGNORECASE):
+                warnings.append(IRWarning(
+                    feature="DDL_SCOPED_TRIGGER_NOT_SUPPORTED",
+                    message="DDL-scoped triggers (ON DATABASE / ON SCHEMA) are not yet "
+                            "supported — only table-level DML triggers (ON <table>) are. "
+                            "This statement was not translated.",
+                    doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html",
+                    severity=Warningseverity.WARNING,
+                    unsupported=True,
+                ))
+                return None, warnings, doc_refs
+            r, w, d = self._parse_trigger_from_sql(sql, body_style="oracle")
+            doc_refs.append(IRDocReference(title="Oracle CREATE TRIGGER", url="https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html", platform="oracle", purpose="Trigger"))
+            return r, warnings + w, doc_refs + d
 
         warnings.append(IRWarning(feature="UNSUPPORTED_STATEMENT", message=f"Not supported: {type(parsed).__name__}", severity=Warningseverity.WARNING))
         return None, warnings, doc_refs

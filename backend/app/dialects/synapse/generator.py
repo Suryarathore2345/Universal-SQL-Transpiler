@@ -13,8 +13,8 @@ from typing import List, Optional, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, IRColumn, IRDocReference, IRFunction,
-    IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning, SortKeyType,
-    Warningseverity,
+    IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView, IRWarning,
+    SortKeyType, Warningseverity,
 )
 
 
@@ -321,4 +321,39 @@ class SynapseGenerator(DialectGenerator):
             feature="FUNCTION_MANUAL_REVIEW",
             message="Function body requires manual review for Synapse T-SQL syntax.",
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Synapse dedicated SQL pools do not support CREATE TRIGGER — triggers
+        are explicitly listed among unsupported T-SQL statements, since
+        dedicated SQL pools are OLAP-oriented (alongside computed columns
+        and unique indexes).
+        Docs: https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-reference-tsql-statements
+        """
+        doc_refs = [IRDocReference(
+            title="T-SQL statements not supported in dedicated SQL pool",
+            url="https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-reference-tsql-statements",
+            platform="synapse",
+            purpose="Trigger unsupported reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Synapse dedicated SQL pools do NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-reference-tsql-statements\n"
+            f"-- No in-database equivalent exists in an OLAP-oriented dedicated SQL pool.\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_SYNAPSE",
+            message="Synapse dedicated SQL pools do not support CREATE TRIGGER — it is "
+                    "explicitly listed among unsupported T-SQL statements for this OLAP-"
+                    "oriented engine, with no in-database alternative.",
+            doc_url="https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-reference-tsql-statements",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs

@@ -15,8 +15,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, IRColumn, IRDocReference, IRFunction,
-    IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning, SortKeyType,
-    Warningseverity,
+    IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView, IRWarning,
+    SortKeyType, Warningseverity,
 )
 
 
@@ -196,6 +196,83 @@ class SQLServerGenerator(DialectGenerator):
                     "Docs: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-function-transact-sql",
             severity=Warningseverity.WARNING,
         )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        SQL Server T-SQL DML trigger.
+        Docs: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql
+
+        T-SQL has no BEFORE trigger timing (only AFTER and INSTEAD OF) — a
+        source BEFORE trigger (e.g. from Oracle) is mapped to INSTEAD OF,
+        the closest available equivalent, with a loud warning: unlike
+        BEFORE, an INSTEAD OF trigger body must perform the INSERT/UPDATE/
+        DELETE itself (SQL Server does not do it automatically afterward).
+        """
+        from app.dialects.procedure_utils import format_body_comment
+        doc_refs = [IRDocReference(
+            title="SQL Server CREATE TRIGGER",
+            url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql",
+            platform="sqlserver",
+            purpose="Trigger generation",
+        )]
+        warnings: List[IRWarning] = []
+
+        qname = self._qualified_name(trigger)
+        table_ref = self._quote_identifier(trigger.table_name)
+        if trigger.table_schema:
+            table_ref = f"{self._quote_identifier(trigger.table_schema)}.{table_ref}"
+
+        if trigger.timing == "BEFORE":
+            timing_kw = "INSTEAD OF"
+            warnings.append(IRWarning(
+                feature="TRIGGER_BEFORE_MAPPED_TO_INSTEAD_OF_SQLSERVER",
+                message="T-SQL has no BEFORE trigger — mapped to INSTEAD OF, the closest "
+                        "equivalent. Unlike BEFORE, an INSTEAD OF trigger body must perform "
+                        "the INSERT/UPDATE/DELETE itself; SQL Server will not do it "
+                        "automatically afterward. Review and adapt the body before deploying.",
+                doc_url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql",
+                severity=Warningseverity.WARNING,
+                unsupported=True,
+            ))
+        elif trigger.timing == "INSTEAD_OF":
+            timing_kw = "INSTEAD OF"
+        else:
+            timing_kw = "AFTER"
+
+        events_str = ", ".join(trigger.events) if trigger.events else "INSERT, UPDATE, DELETE"
+        not_for_repl = " NOT FOR REPLICATION" if trigger.not_for_replication else ""
+        or_alter = "OR ALTER " if trigger.or_replace else ""
+        body_comment = format_body_comment(trigger.language or "tsql", "sqlserver", trigger.language)
+
+        if trigger.update_of_columns:
+            warnings.append(IRWarning(
+                feature="TRIGGER_UPDATE_OF_NOT_SUPPORTED_SQLSERVER",
+                message=f"Source trigger fires only on UPDATE OF specific columns "
+                        f"({', '.join(trigger.update_of_columns)}) — T-SQL triggers fire on "
+                        f"every UPDATE regardless of which columns changed. Use "
+                        f"UPDATE(column_name) inside the trigger body to replicate this.",
+                doc_url="https://learn.microsoft.com/en-us/sql/t-sql/functions/update-trsql",
+                severity=Warningseverity.WARNING,
+                unsupported=True,
+            ))
+
+        sql = (
+            f"CREATE {or_alter}TRIGGER {qname} ON {table_ref}\n"
+            f"{timing_kw} {events_str}{not_for_repl} AS\nBEGIN\n"
+            f"{body_comment}\n"
+            f"{trigger.body}\n"
+            f"END;"
+        )
+        warnings.append(IRWarning(
+            feature="TRIGGER_MANUAL_REVIEW",
+            message="Trigger body requires manual review for T-SQL syntax (inserted/deleted "
+                    "pseudo-tables, statement-level vs row-level semantics). "
+                    "Docs: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql",
+            severity=Warningseverity.WARNING,
+        ))
+        return sql, warnings, doc_refs
 
     def _column_def(
         self, col: IRColumn

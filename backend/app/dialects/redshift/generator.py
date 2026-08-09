@@ -19,8 +19,8 @@ from typing import List, Optional, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, GenericType, IRColumn, IRDocReference,
-    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning,
-    RefreshType, SortKeyType, Warningseverity,
+    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView,
+    IRWarning, RefreshType, SortKeyType, Warningseverity,
 )
 
 
@@ -328,6 +328,42 @@ class RedshiftGenerator(DialectGenerator):
             f"$$ LANGUAGE {lang};"
         )
         return sql, [IRWarning(feature="FUNCTION_MANUAL_REVIEW", message="UDF body requires manual review. Redshift supports Python (plpythonu) and SQL UDFs.", severity=Warningseverity.WARNING)], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Redshift is PostgreSQL-derived but does not implement CREATE TRIGGER
+        or event triggers — listed explicitly among unsupported PostgreSQL
+        features. There is no in-database alternative; trigger-like behavior
+        requires an external mechanism (e.g. EventBridge, CDC streaming).
+        Docs: https://docs.aws.amazon.com/redshift/latest/dg/c_unsupported-postgresql-features.html
+        """
+        doc_refs = [IRDocReference(
+            title="Unsupported PostgreSQL features — Amazon Redshift",
+            url="https://docs.aws.amazon.com/redshift/latest/dg/c_unsupported-postgresql-features.html",
+            platform="redshift",
+            purpose="Trigger unsupported reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Redshift does NOT support CREATE TRIGGER (unsupported PostgreSQL feature).\n"
+            f"-- Docs: https://docs.aws.amazon.com/redshift/latest/dg/c_unsupported-postgresql-features.html\n"
+            f"-- No in-database equivalent exists. Trigger-like behavior requires an\n"
+            f"-- external mechanism (e.g. EventBridge, CDC streaming into Redshift).\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_REDSHIFT",
+            message="Redshift does not support CREATE TRIGGER — it is explicitly listed among "
+                    "unsupported PostgreSQL features, with no in-database alternative. "
+                    "Trigger-like behavior requires an external mechanism.",
+            doc_url="https://docs.aws.amazon.com/redshift/latest/dg/c_unsupported-postgresql-features.html",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
+        )], doc_refs
 
     def _qualified_name(self, obj) -> str:
         # Quote every segment — see the identical note on the other

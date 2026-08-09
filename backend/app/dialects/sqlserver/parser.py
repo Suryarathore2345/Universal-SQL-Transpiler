@@ -7,6 +7,7 @@ Official docs used:
   IDENTITY:       https://learn.microsoft.com/en-us/sql/t-sql/functions/identity-function-transact-sql
   CREATE VIEW:    https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql
   Indexed views:  https://learn.microsoft.com/en-us/sql/relational-databases/views/create-indexed-views
+  CREATE TRIGGER: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql
 """
 from __future__ import annotations
 
@@ -77,6 +78,24 @@ class SQLServerParser(DialectParser):
         if re.search(r'\bCREATE\b.*?\bFUNCTION\b', sql, re.IGNORECASE | re.DOTALL):
             r, w, d = self._parse_func_from_sql(sql, body_style="tsql")
             return r, warnings + w, d
+        if re.search(r'\bCREATE\b(?:\s+OR\s+ALTER)?\s+TRIGGER\b', sql, re.IGNORECASE):
+            # sqlglot does not AST-parse CREATE TRIGGER in tsql (falls back to
+            # an opaque Command/Block), so this is regex-fallback only — same
+            # treatment as PROCEDURE/FUNCTION above.
+            if re.search(r'\bON\s+(?:DATABASE|ALL\s+SERVER)\b', sql, re.IGNORECASE):
+                warnings.append(IRWarning(
+                    feature="DDL_SCOPED_TRIGGER_NOT_SUPPORTED",
+                    message="DDL-scoped triggers (ON DATABASE / ON ALL SERVER) are not yet "
+                            "supported — only table-level DML triggers (ON <table>) are. "
+                            "This statement was not translated.",
+                    doc_url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql",
+                    severity=Warningseverity.WARNING,
+                    unsupported=True,
+                ))
+                return None, warnings, doc_refs
+            r, w, d = self._parse_trigger_from_sql(sql, body_style="tsql")
+            doc_refs.append(IRDocReference(title="SQL Server CREATE TRIGGER", url="https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql", platform="sqlserver", purpose="Trigger"))
+            return r, warnings + w, doc_refs + d
 
         warnings.append(IRWarning(feature="UNSUPPORTED_STATEMENT", message=f"Not yet supported: {type(parsed).__name__}", severity=Warningseverity.WARNING))
         return None, warnings, doc_refs

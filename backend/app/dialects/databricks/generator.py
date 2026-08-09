@@ -16,8 +16,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, GenericType, IRColumn, IRDocReference,
-    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning,
-    Warningseverity,
+    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView,
+    IRWarning, Warningseverity,
 )
 
 
@@ -351,4 +351,42 @@ class DatabricksGenerator(DialectGenerator):
             message="UDF body requires manual review for Databricks SQL/Python function syntax. "
                     "Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function.html",
             severity=Warningseverity.WARNING,
+        )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Databricks SQL / Delta Lake has no CREATE TRIGGER statement — there
+        is no synchronous row-level DML trigger concept. "Triggers" in
+        Databricks refer to job/workflow triggers (table update, file
+        arrival, schedule), an orchestration concept, not a DDL object.
+        Docs: https://docs.databricks.com/aws/en/jobs/trigger-table-update
+        """
+        doc_refs = [IRDocReference(
+            title="Databricks Jobs — trigger on table update (no native DML trigger)",
+            url="https://docs.databricks.com/aws/en/jobs/trigger-table-update",
+            platform="databricks",
+            purpose="Trigger unsupported — nearest alternative reference",
+        )]
+        qname = self._qualified_name(trigger)
+        sql = (
+            f"-- Databricks does NOT support CREATE TRIGGER.\n"
+            f"-- Docs: https://docs.databricks.com/aws/en/jobs/trigger-table-update\n"
+            f"-- Nearest equivalent: a Databricks Job triggered on table update (or a\n"
+            f"-- Delta Live Tables / CDC pipeline) — orchestration-level, not a\n"
+            f"-- synchronous row-level trigger. Requires redesigning the logic below.\n"
+            f"-- Original trigger '{qname}' ON {trigger.table_name} "
+            f"({trigger.timing} {', '.join(trigger.events) or 'DML'}) preserved for reference:\n"
+            f"-- {trigger.body.replace(chr(10), chr(10) + '-- ')}"
+        )
+        return sql, [IRWarning(
+            feature="TRIGGER_NOT_SUPPORTED_DATABRICKS",
+            message="Databricks has no CREATE TRIGGER statement or row-level trigger concept. "
+                    "The nearest equivalent is a Job triggered on table update or a Delta Live "
+                    "Tables/CDC pipeline — this requires a redesign, not a direct translation, "
+                    "so only a documented stub was generated.",
+            doc_url="https://docs.databricks.com/aws/en/jobs/trigger-table-update",
+            severity=Warningseverity.WARNING,
+            unsupported=True,
         )], doc_refs

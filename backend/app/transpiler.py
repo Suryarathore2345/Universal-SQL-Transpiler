@@ -13,8 +13,8 @@ from typing import Dict, List, Optional, Type
 from app.dialects.base import DialectGenerator, DialectParser
 from app.ir.models import (
     Dialect, IRDDLObject, IRDocReference, IRFunction, IRMaterializedView,
-    IRProcedure, IRTable, IRView, IRWarning, ObjectType, TranspiledObject,
-    TranspileResult, Warningseverity,
+    IRProcedure, IRTable, IRTrigger, IRView, IRWarning, ObjectType,
+    TranspiledObject, TranspileResult, Warningseverity,
 )
 from app.validator import validate_residuals, compute_confidence
 from app.query_transpiler import detect_statement_type, transpile_script, transpile_query
@@ -203,6 +203,9 @@ class Transpiler:
             elif isinstance(ir_obj, IRFunction):
                 detected_object_type = ObjectType.FUNCTION
                 gen_sql, gen_warnings, gen_refs = generator.generate_function(ir_obj)
+            elif isinstance(ir_obj, IRTrigger):
+                detected_object_type = ObjectType.TRIGGER
+                gen_sql, gen_warnings, gen_refs = generator.generate_trigger(ir_obj)
             else:
                 all_warnings.append(IRWarning(
                     feature="UNSUPPORTED_OBJECT_TYPE",

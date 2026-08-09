@@ -34,6 +34,7 @@ class ObjectType(str, Enum):
     MATERIALIZED_VIEW = "materialized_view"
     PROCEDURE = "procedure"
     FUNCTION = "function"
+    TRIGGER = "trigger"
     INDEX = "index"
     SCHEMA = "schema"
     DATABASE = "database"
@@ -479,6 +480,34 @@ class IRFunction(BaseModel):
     requires_manual_review: bool = True
 
 
+class IRTrigger(BaseModel):
+    """
+    Canonical representation of a table-level DML trigger.
+
+    Scoped to ordinary table triggers (ON <table> {BEFORE|AFTER|INSTEAD OF}
+    INSERT/UPDATE/DELETE). Only SQL Server and Oracle have native CREATE
+    TRIGGER DDL among the 9 target dialects — every other dialect's
+    generator emits a documented "not supported" stub instead of a real
+    translation, since no equivalent construct exists there.
+    """
+    name: str
+    schema_name: Optional[str] = None
+    database_name: Optional[str] = None
+    table_name: str
+    table_schema: Optional[str] = None
+    timing: str = "AFTER"  # BEFORE | AFTER | INSTEAD_OF
+    events: List[str] = Field(default_factory=list)  # INSERT, UPDATE, DELETE (combinable)
+    update_of_columns: List[str] = Field(default_factory=list)  # Oracle "UPDATE OF col1, col2"
+    for_each_row: bool = False  # Oracle: explicit FOR EACH ROW. SQL Server triggers are always statement-level.
+    when_condition: Optional[str] = None  # Oracle WHEN (...) clause
+    not_for_replication: bool = False  # SQL Server NOT FOR REPLICATION option
+    language: Optional[str] = None
+    body: str
+    or_replace: bool = False
+    comment: Optional[str] = None
+    requires_manual_review: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Sequence IR
 # ---------------------------------------------------------------------------
@@ -541,6 +570,7 @@ IRDDLObject = Union[
     IRMaterializedView,
     IRProcedure,
     IRFunction,
+    IRTrigger,
     IRSequence,
     IRSchema,
     IRAlterTable,

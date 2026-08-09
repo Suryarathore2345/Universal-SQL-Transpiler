@@ -22,8 +22,8 @@ from typing import List, Tuple
 from app.dialects.base import DialectGenerator
 from app.ir.models import (
     Dialect, DistributionStyle, GeneratedType, IRColumn, IRDocReference,
-    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRView, IRWarning,
-    RefreshType, Warningseverity,
+    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView,
+    IRWarning, RefreshType, Warningseverity,
 )
 
 
@@ -396,3 +396,74 @@ class OracleGenerator(DialectGenerator):
                     "Docs: https://docs.oracle.com/en/database/oracle/oracle-database/23/sqlrf/CREATE-FUNCTION.html",
             severity=Warningseverity.WARNING,
         )], doc_refs
+
+    def generate_trigger(
+        self, trigger: IRTrigger
+    ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
+        """
+        Oracle PL/SQL DML trigger.
+        Docs: https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html
+        Syntax: CREATE [OR REPLACE] TRIGGER name {BEFORE|AFTER|INSTEAD OF}
+                event [OR event ...] [OF cols] ON table
+                [FOR EACH ROW] [WHEN (condition)] BEGIN body END name;
+        """
+        from app.dialects.procedure_utils import format_body_comment
+        doc_refs = [IRDocReference(
+            title="Oracle CREATE TRIGGER",
+            url="https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html",
+            platform="oracle",
+            purpose="Trigger generation",
+        )]
+        warnings: List[IRWarning] = []
+
+        qname = self._qualified_name(trigger)
+        table_ref = self._quote_identifier(trigger.table_name)
+        if trigger.table_schema:
+            table_ref = f"{self._quote_identifier(trigger.table_schema)}.{table_ref}"
+
+        timing_kw = trigger.timing.replace("_", " ")  # INSTEAD_OF -> INSTEAD OF
+        if trigger.timing == "INSTEAD_OF":
+            warnings.append(IRWarning(
+                feature="TRIGGER_INSTEAD_OF_TABLE_ORACLE",
+                message="Oracle only allows INSTEAD OF triggers on views, not ordinary "
+                        f"tables. Verify {trigger.table_name} is a view, or restructure "
+                        "this as a BEFORE trigger with equivalent logic.",
+                doc_url="https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html",
+                severity=Warningseverity.WARNING,
+                unsupported=True,
+            ))
+
+        events_str = " OR ".join(trigger.events) if trigger.events else "INSERT OR UPDATE OR DELETE"
+        of_cols = f" OF {', '.join(trigger.update_of_columns)}" if trigger.update_of_columns else ""
+        or_replace = "OR REPLACE " if trigger.or_replace else ""
+        for_each_row = "\nFOR EACH ROW" if trigger.for_each_row else ""
+        when_clause = f"\nWHEN ({trigger.when_condition})" if trigger.when_condition else ""
+        body_comment = format_body_comment(trigger.language or "plsql", "oracle", trigger.language)
+
+        if trigger.not_for_replication:
+            warnings.append(IRWarning(
+                feature="TRIGGER_NOT_FOR_REPLICATION_NOT_SUPPORTED_ORACLE",
+                message="Source trigger used T-SQL's NOT FOR REPLICATION option, which has "
+                        "no Oracle equivalent and was dropped. If replication-triggered "
+                        "firing must be suppressed, guard the trigger body explicitly.",
+                severity=Warningseverity.WARNING,
+                unsupported=True,
+            ))
+
+        sql = (
+            f"CREATE {or_replace}TRIGGER {qname}\n"
+            f"{timing_kw} {events_str}{of_cols} ON {table_ref}"
+            f"{for_each_row}{when_clause}\n"
+            f"BEGIN\n"
+            f"{body_comment}\n"
+            f"{trigger.body}\n"
+            f"END {trigger.name};"
+        )
+        warnings.append(IRWarning(
+            feature="TRIGGER_MANUAL_REVIEW",
+            message="Trigger body requires manual review for Oracle PL/SQL syntax "
+                    "(:NEW/:OLD correlation names, row-level vs statement-level semantics). "
+                    "Docs: https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/CREATE-TRIGGER-statement.html",
+            severity=Warningseverity.WARNING,
+        ))
+        return sql, warnings, doc_refs
