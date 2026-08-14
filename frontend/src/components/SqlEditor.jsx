@@ -72,6 +72,11 @@ export default function SqlEditor({
           cursorBlinking: 'smooth',
           padding: { top: 12, bottom: 12 },
           suggest: { showKeywords: true },
+          // Monaco's word-based suggestions scan the document text itself and
+          // surface any word that's appeared in it (e.g. column names from a
+          // pasted DDL) alongside real SQL keywords. Off, so the completion
+          // list only ever contains actual SQL language suggestions.
+          wordBasedSuggestions: 'off',
         }}
         onMount={handleMount}
       />
