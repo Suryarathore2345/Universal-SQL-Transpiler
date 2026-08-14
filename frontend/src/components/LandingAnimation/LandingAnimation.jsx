@@ -22,23 +22,26 @@ const PLATFORMS = [
 const STREAM_TOKENS = [
   '010101', 'CREATE TABLE', 'VARCHAR', 'BIGINT',
   'SELECT', 'TIMESTAMP', 'SQL', 'INSERT',
-  '101010', 'JOIN', 'WHERE', 'GROUP BY',
 ]
 
 // Phase durations in ms — full sequence, and a much shorter one for
-// prefers-reduced-motion. `null` duration means "wait for skip/click".
+// prefers-reduced-motion. `duration: null` means "wait for a click" —
+// the sequence auto-plays up to 'ready', then holds until the user clicks
+// to actually enter the app (see handleSkip / the CTA in 'ready').
 const PHASES_FULL = [
-  { key: 'dark',       duration: 300 },
-  { key: 'streams',    duration: 650 },
-  { key: 'core',       duration: 500 },
-  { key: 'logo',       duration: 600 },
-  { key: 'hero',       duration: 1100 },
-  { key: 'platforms',  duration: 650 },
-  { key: 'transition', duration: 600 },
+  { key: 'dark',       duration: 600 },
+  { key: 'streams',    duration: 4200 },
+  { key: 'core',       duration: 1600 },
+  { key: 'logo',       duration: 1000 },
+  { key: 'hero',       duration: 1800 },
+  { key: 'platforms',  duration: 1400 },
+  { key: 'ready',      duration: null },
+  { key: 'transition', duration: 700 },
 ]
 const PHASES_REDUCED = [
-  { key: 'logo',       duration: 350 },
-  { key: 'hero',       duration: 300 },
+  { key: 'logo',       duration: 400 },
+  { key: 'hero',       duration: 400 },
+  { key: 'ready',      duration: null },
   { key: 'transition', duration: 350 },
 ]
 
@@ -84,17 +87,24 @@ export default function LandingAnimation() {
       }
     }
     const { duration } = phases[phaseIndex]
+    if (duration === null) return undefined // 'ready' — hold here until the user clicks
     timerRef.current = setTimeout(() => setPhaseIndex((i) => i + 1), duration)
     return () => clearTimeout(timerRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phaseIndex, visible])
 
-  // Click/tap anywhere skips straight to the dock transition.
+  // Click/tap anywhere: during the show, jump straight to the "ready" CTA
+  // instead of playing out the rest of the sequence. Once on "ready", a
+  // click is what actually enters the app (dock transition).
   const handleSkip = () => {
-    const transitionIdx = phases.findIndex((p) => p.key === 'transition')
-    if (transitionIdx === -1 || phaseIndex >= transitionIdx) return
+    const readyIdx = phases.findIndex((p) => p.key === 'ready')
+    if (phase === 'ready') {
+      setPhaseIndex(readyIdx + 1) // → transition
+      return
+    }
+    if (readyIdx === -1 || phaseIndex >= readyIdx) return
     clearTimeout(timerRef.current)
-    setPhaseIndex(transitionIdx)
+    setPhaseIndex(readyIdx)
   }
 
   // Replay support — dispatched from the app footer.
@@ -113,9 +123,10 @@ export default function LandingAnimation() {
 
   const showStreams = !reduceMotion && (phase === 'streams' || phase === 'core')
   const showCore = !reduceMotion && phase === 'core'
-  const showLogo = phase === 'logo' || phase === 'hero' || phase === 'platforms' || phase === 'transition'
-  const showHeroText = phase === 'hero' || phase === 'platforms' || phase === 'transition'
-  const showPlatforms = phase === 'platforms' || phase === 'transition'
+  const showLogo = phase === 'logo' || phase === 'hero' || phase === 'platforms' || phase === 'ready' || phase === 'transition'
+  const showHeroText = phase === 'hero' || phase === 'platforms' || phase === 'ready' || phase === 'transition'
+  const showPlatforms = phase === 'platforms' || phase === 'ready' || phase === 'transition'
+  const showReadyCta = phase === 'ready'
   const isTransitioning = phase === 'transition'
 
   return (
@@ -132,18 +143,25 @@ export default function LandingAnimation() {
 
         {showStreams && (
           <div className="landing-streams">
-            {STREAM_TOKENS.map((tok, i) => (
-              <motion.span
-                key={tok}
-                className="landing-token"
-                style={{ top: `${8 + (i * 84) % 84}%` }}
-                initial={{ x: i % 2 === 0 ? '-40vw' : '40vw', opacity: 0 }}
-                animate={{ x: 0, opacity: [0, 1, 1, 0] }}
-                transition={{ duration: 0.9, delay: i * 0.04, ease: 'easeInOut' }}
-              >
-                {tok}
-              </motion.span>
-            ))}
+            {STREAM_TOKENS.map((tok, i) => {
+              const delay = i * 0.4
+              const holdDuration = 2.8
+              return (
+                <motion.span
+                  key={tok}
+                  className="landing-token"
+                  style={{ top: `${8 + i * 10}%` }}
+                  initial={{ x: i % 2 === 0 ? '-42vw' : '42vw', opacity: 0 }}
+                  animate={{ x: 0, opacity: [0, 1, 1, 0] }}
+                  transition={{
+                    x: { duration: 1.2, delay, ease: 'easeOut' },
+                    opacity: { duration: holdDuration, delay, times: [0, 0.2, 0.78, 1], ease: 'linear' },
+                  }}
+                >
+                  {tok}
+                </motion.span>
+              )
+            })}
           </div>
         )}
 
@@ -151,12 +169,12 @@ export default function LandingAnimation() {
           <div className="landing-core">
             <motion.svg className="landing-arc landing-arc-a" viewBox="0 0 200 200"
               initial={{ rotate: -30, opacity: 0 }} animate={{ rotate: 160, opacity: 1 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}>
+              transition={{ duration: 0.9, ease: 'easeOut' }}>
               <circle cx="100" cy="100" r="86" />
             </motion.svg>
             <motion.svg className="landing-arc landing-arc-b" viewBox="0 0 200 200"
               initial={{ rotate: 30, opacity: 0 }} animate={{ rotate: -160, opacity: 1 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}>
+              transition={{ duration: 0.9, ease: 'easeOut' }}>
               <circle cx="100" cy="100" r="70" />
             </motion.svg>
           </div>
@@ -220,7 +238,27 @@ export default function LandingAnimation() {
           </motion.div>
         )}
 
-        {!isTransitioning && (
+        {showReadyCta && (
+          <motion.div
+            className="landing-cta"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <p className="landing-cta-line">
+              Ready to Transpile? Step Into the Universal SQL Transpiler World →
+            </p>
+            <motion.p
+              className="landing-cta-hint"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              CLICK ANYWHERE TO ENTER
+            </motion.p>
+          </motion.div>
+        )}
+
+        {!isTransitioning && !showReadyCta && (
           <div className="landing-skip-hint">Click to skip</div>
         )}
     </motion.div>
