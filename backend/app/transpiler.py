@@ -25,6 +25,38 @@ from app.sql_text_utils import split_statements as _split_statements
 # Dialect registry — add new dialects here as they are implemented
 # ---------------------------------------------------------------------------
 
+def _dedupe_warnings(warnings: List[IRWarning]) -> List[IRWarning]:
+    """
+    Collapse warnings that repeat verbatim (same feature + message) into a
+    single entry, appending an occurrence count. A warning like
+    CONVERT_TIMEZONE_DYNAMIC_TZ naturally fires once per matching call site —
+    a query referencing the same column expression in ten places would
+    otherwise flood the panel with ten identical copies of the same notice.
+    """
+    counts: Dict[tuple, int] = {}
+    first_seen: Dict[tuple, IRWarning] = {}
+    order: List[tuple] = []
+    for w in warnings:
+        key = (w.feature, w.message)
+        if key not in first_seen:
+            first_seen[key] = w
+            counts[key] = 1
+            order.append(key)
+        else:
+            counts[key] += 1
+
+    deduped: List[IRWarning] = []
+    for key in order:
+        w = first_seen[key]
+        count = counts[key]
+        if count > 1:
+            w = w.model_copy(update={
+                "message": f"{w.message} (repeated {count}x in this statement)",
+            })
+        deduped.append(w)
+    return deduped
+
+
 def _load_parsers() -> Dict[Dialect, DialectParser]:
     from app.dialects.redshift.parser import RedshiftParser
     from app.dialects.snowflake.parser import SnowflakeParser
@@ -223,9 +255,9 @@ class Transpiler:
             all_warnings.extend(gen_warnings)
             all_doc_refs.extend(gen_refs)
 
-        # Separate warnings from unsupported features
-        unsupported = [w for w in all_warnings if w.unsupported]
-        clean_warnings = [w for w in all_warnings if not w.unsupported]
+        # Separate warnings from unsupported features, then collapse repeats
+        unsupported = _dedupe_warnings([w for w in all_warnings if w.unsupported])
+        clean_warnings = _dedupe_warnings([w for w in all_warnings if not w.unsupported])
 
         # Deduplicate doc refs by URL
         seen_urls: set = set()
@@ -295,8 +327,8 @@ class Transpiler:
         stmt_type = detect_statement_type(stmts[0]) if stmts else ObjectType.SELECT_QUERY
         detected_object_type = stmt_type or ObjectType.SELECT_QUERY
 
-        unsupported = [w for w in warnings if w.unsupported]
-        clean_warnings = [w for w in warnings if not w.unsupported]
+        unsupported = _dedupe_warnings([w for w in warnings if w.unsupported])
+        clean_warnings = _dedupe_warnings([w for w in warnings if not w.unsupported])
 
         confidence_score, confidence_level = compute_confidence(clean_warnings, unsupported, [])
         elapsed_ms = int((time.monotonic() - t0) * 1000)

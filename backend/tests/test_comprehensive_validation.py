@@ -15,6 +15,8 @@ Note on source selection:
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 from app.transpiler import Transpiler
 
@@ -27,6 +29,12 @@ def _sql(src: str, tgt: str, stmt: str) -> str:
     """Transpile a single-statement SQL and return the result string."""
     result = Transpiler.convert(stmt, src, tgt)
     return result.converted_sql
+
+
+def _norm(s: str) -> str:
+    """Collapse all whitespace to single spaces, for layout-agnostic checks
+    against output that may legitimately be pretty-printed across lines."""
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def _all_warnings(result) -> list:
@@ -229,7 +237,7 @@ def test_tsql_nvl2_to_case(tgt):
     """NVL2(expr, nn_val, null_val) → CASE WHEN expr IS NOT NULL THEN nn_val ELSE null_val END."""
     sql = "CREATE OR REPLACE VIEW s.v AS SELECT NVL2(col, 'has value', 'no value') AS x FROM t;"
     out = _sql("oracle", tgt, sql)
-    assert "CASE WHEN col IS NOT NULL THEN 'has value' ELSE 'no value' END" in out
+    assert "CASE WHEN col IS NOT NULL THEN 'has value' ELSE 'no value' END" in _norm(out)
     assert "NVL2(" not in out.upper()
 
 
@@ -502,7 +510,7 @@ class TestBigQueryConversions:
         """NVL2 → CASE WHEN for BigQuery (BigQuery has no NVL2)."""
         sql = "CREATE OR REPLACE VIEW s.v AS SELECT NVL2(col, 'a', 'b') AS x FROM t;"
         out = _sql("oracle", "bigquery", sql)
-        assert "CASE WHEN col IS NOT NULL THEN 'a' ELSE 'b' END" in out
+        assert "CASE WHEN col IS NOT NULL THEN 'a' ELSE 'b' END" in _norm(out)
 
     def test_decode_to_case(self):
         """DECODE → CASE WHEN for BigQuery (no DECODE in BigQuery)."""
@@ -637,7 +645,7 @@ class TestDatabricksConversions:
         """NVL2 → CASE WHEN for Databricks."""
         sql = "CREATE OR REPLACE VIEW s.v AS SELECT NVL2(col, 'a', 'b') AS x FROM t;"
         out = _sql("oracle", "databricks", sql)
-        assert "CASE WHEN col IS NOT NULL THEN 'a' ELSE 'b' END" in out
+        assert "CASE WHEN col IS NOT NULL THEN 'a' ELSE 'b' END" in _norm(out)
 
     def test_decode_to_case(self):
         """DECODE → CASE for Databricks.

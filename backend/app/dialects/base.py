@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import yaml
 import sqlglot.expressions as exp
+import sqlparse
 
 from app.ir.models import (
     Dialect, GenericType, IRCheckConstraint, IRColumn, IRDataType, IRDDLObject,
@@ -648,6 +649,42 @@ class DialectGenerator(ABC):
 
     def __init__(self) -> None:
         self.mapper = TypeMapper.get()
+
+    def _pretty_format_defn(self, sql: str, _sqlglot_dialect: str = "") -> str:
+        """
+        Reformat a view/MV body so nested CTEs, JOINs, and CASE expressions
+        render as multi-line, indented SQL instead of the single unbroken
+        line the source system stored it as.
+
+        Uses sqlparse (a tokenizer/reindenter, not a SQL engine) rather than
+        sqlglot here on purpose: sqlglot parses into its own AST and, when
+        regenerated, silently normalizes semantically-equivalent-but-
+        different syntax — e.g. NVL(a,b) -> COALESCE(a,b), `x IS NOT NULL`
+        -> `NOT x IS NULL` — regardless of target dialect. That would quietly
+        undo the dialect-native function choices the _apply_*_view_conversions
+        regex pipeline just made. sqlparse only touches whitespace/newlines,
+        never rewrites tokens, so it can't have that failure mode.
+
+        Best-effort: on any formatting failure, return the input unchanged
+        rather than risk corrupting or dropping part of the definition.
+        """
+        try:
+            formatted = run_with_timeout(
+                sqlparse.format, sql, reindent=True, indent_width=4,
+            )
+        except Exception:
+            # Broad on purpose, including SqlglotParseTimeout from the shared
+            # watchdog: a formatting failure here must never break the
+            # transpile — fall back to the unformatted (but correct) text.
+            return sql
+        if not formatted.strip():
+            return sql
+        # sqlparse doesn't know EXTRACT(field FROM source)'s FROM is part of
+        # the function call, not a query clause, and breaks a line before it
+        # as if it were one. Rejoin — the line break there is actively
+        # misleading, not just stylistically different.
+        formatted = re.sub(r'(?i)(EXTRACT\([^()\n]*?)\n\s*(FROM\b)', r'\1 \2', formatted)
+        return formatted
 
     @abstractmethod
     def generate_table(self, table: IRTable) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
@@ -1418,6 +1455,7 @@ class DialectGenerator(ABC):
         warnings.extend(self._flag_unsupported_initcap(sql))
         warnings.extend(self._flag_unsupported_regexp(sql))
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "tsql")
         return sql, warnings
 
     def _strip_recursive_keyword(self, sql: str) -> str:
@@ -1928,6 +1966,7 @@ class DialectGenerator(ABC):
         sql = self._convert_tsql_format_to_to_char(sql)
         sql = self._convert_date_part_year_to_extract(sql)
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "oracle")
         return sql, warnings
 
     def _apply_snowflake_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -1949,6 +1988,7 @@ class DialectGenerator(ABC):
         sql = self._convert_tsql_format_to_to_char(sql)
         sql = self._convert_date_part_year_to_year(sql)
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "snowflake")
         return sql, warnings
 
     def _apply_bigquery_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -1975,6 +2015,7 @@ class DialectGenerator(ABC):
         sql = self._convert_charindex_to_strpos(sql)
         sql = self._convert_date_part_year_to_year(sql)
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "bigquery")
         return sql, warnings
 
     def _apply_databricks_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -2002,6 +2043,7 @@ class DialectGenerator(ABC):
         sql = self._convert_charindex_to_locate(sql)
         sql = self._convert_date_part_year_to_year(sql)
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "databricks")
         return sql, warnings
 
     # -----------------------------------------------------------------------
@@ -2281,6 +2323,7 @@ class DialectGenerator(ABC):
         sql = self._convert_date_part_year_to_year(sql)
         warnings.extend(self._flag_qualify_unsupported(sql))
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "spark")
         return sql, warnings
 
     def _apply_redshift_view_conversions(self, sql: str) -> Tuple[str, List[IRWarning]]:
@@ -2299,4 +2342,5 @@ class DialectGenerator(ABC):
         sql = self._convert_len_to_length(sql)
         sql = self._convert_ceiling_to_ceil(sql)
         sql = self._unmask_protected_spans(sql, _mask_map)
+        sql = self._pretty_format_defn(sql, "redshift")
         return sql, warnings
