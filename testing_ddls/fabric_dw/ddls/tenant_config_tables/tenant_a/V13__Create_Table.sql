@@ -1,0 +1,72 @@
+IF OBJECT_ID('${schema}.agg_student_learning_progress', 'U') IS  NULL
+BEGIN
+CREATE TABLE ${schema}.agg_student_learning_progress(
+	local_date date ,
+	student_dw_id bigint ,
+	school_id varchar(36) ,
+	school_dw_id bigint ,
+	school_name varchar(384) ,
+	school_label varchar(30)  ,
+	school_city_name varchar(100) ,
+	tenant_name varchar(765) ,
+	school_organisation varchar(50) ,
+	school_country_name varchar(100) ,
+	grade_name varchar(250) ,
+	section_name varchar(384) ,
+	student_tags varchar(256) ,
+	student_special_needs varchar(3)  ,
+	class_gen_subject varchar(382) ,
+	content_academic_year_name varchar(20) ,
+	total_score decimal(38, 2) ,
+	completed_lessons int ,
+	session_time float ,
+	fle_session_time float 
+);
+END;
+
+IF OBJECT_ID('${schema}.teacher_test_dm', 'U') IS  NULL
+BEGIN
+CREATE TABLE ${schema}.teacher_test_dm(
+	teacher_dw_id bigint ,
+	school_name varchar(384) ,
+	school_dw_id bigint ,
+	school_organisation varchar(50) ,
+	tenant_name varchar(765) ,
+	grade_k12grade int ,
+	grade_name varchar(250) ,
+	academic_year_type varchar(36) ,
+	academic_year_start_date date ,
+	academic_year_end_date date ,
+	class_gen_subject varchar(255) ,
+	class_title varchar(255) ,
+	class_dw_id bigint ,
+	course_type varchar(25) ,
+	tt_dw_id bigint ,
+	tt_test_id varchar(36) ,
+	class_id varchar(36) ,
+	teacher_id varchar(36) ,
+	tt_test_title varchar(765) ,
+	tt_test_blueprint_id varchar(36) ,
+	tt_test_status varchar(50) ,
+	tt_created_date date ,
+	created_time datetime2(6) ,
+	published_date date ,
+	published_time datetime2(6) ,
+	tt_assigned_student_id varchar(36) ,
+	ttds_test_start_time datetime2(6) ,
+	ttds_test_end_time datetime2(6) ,
+	tt_start_date_flag varchar(11) ,
+	lessons_assigned bigint ,
+	questions_assigned bigint ,
+	ttds_dw_id bigint ,
+	ttds_test_delivery_id varchar(36) ,
+	student_test_start_time datetime2(6) ,
+	student_test_end_time datetime2(6) ,
+	fttcp_candidate_dw_id bigint ,
+	stud_time_spent_in_mins float ,
+	stars_earned int ,
+	test_score float ,
+	completion_status varchar(50) ,
+	tt_due_date_adoption_flag varchar(50)
+);
+END;

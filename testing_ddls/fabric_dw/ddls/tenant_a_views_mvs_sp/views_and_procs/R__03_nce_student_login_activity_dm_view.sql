@@ -1,0 +1,1 @@
+DROP VIEW IF EXISTS ${os_bi_coredw}.nce_student_login_activity_dm_view ;

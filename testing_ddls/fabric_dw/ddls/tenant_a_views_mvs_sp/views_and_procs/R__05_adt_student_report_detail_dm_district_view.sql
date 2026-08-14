@@ -1,0 +1,42 @@
+CREATE OR ALTER VIEW ${os_bi_coredw}.adt_student_report_detail_dm_district_view
+AS
+SELECT
+    adt.tenant_name,
+    adt.school_organisation,
+    adt.school_city_name,
+    adt.school_composition,
+    adt.school_name,
+    adt.school_id,
+    adt.school_dw_id,
+    adt.school_label,
+    adt.class_gen_subject,
+    adt.test_skill,
+    adt.test_id,
+    adt.grade,
+    adt.student_special_needs,
+    adt.student_tags,
+    adt.student_current_status,
+    adt.academicyear,
+    adt.class_total_students,
+    adt.fasr_dw_id,
+    adt.fasr_student_dw_id,
+    adt.fasr_created_date,
+    adt.academic_year,
+    adt.test_order,
+    adt.previous_score,
+    adt.fasr_final_score,
+    adt.fasr_final_result,
+    adt.target_cefr_level,
+    adt.fasr_final_grade,
+    adt.fasr_total_time_spent,
+    sdm.[school name],
+    sdm.[school dw id],
+    sdm.[district],
+    sdm.[name 3 in shape file],
+    sdm.[district latitude],
+    sdm.[district longitude],
+    sdm.[school latitude],
+    sdm.[school longitude]
+FROM ${rs_bi_coredw}.adt_student_report_detail_dm_view AS adt
+FULL OUTER JOIN ${rs_bi_coredw}.school_district_mapping AS sdm
+    ON sdm.[school dw id] = adt.school_dw_id;
