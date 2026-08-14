@@ -177,13 +177,10 @@ export default function App() {
       <header className="app-header">
         <div className="header-inner">
           <div className="logo-wrap">
-            <span className="logo-icon">⟨⟩</span>
+            <img src="/logo.png" alt="UST" className="logo-icon-img" />
             <div>
               <h1 className="logo-title">Universal SQL Transpiler</h1>
-              <p className="logo-sub">
-                Convert DDL between Redshift · Snowflake · SQL Server · Synapse ·
-                Fabric DW · Fabric Lakehouse · Databricks · Oracle · BigQuery
-              </p>
+              <p className="logo-sub">Write Once. Run Anywhere.</p>
             </div>
           </div>
           <a
