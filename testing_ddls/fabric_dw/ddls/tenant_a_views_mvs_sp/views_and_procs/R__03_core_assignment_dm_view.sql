@@ -1,0 +1,1 @@
+DROP VIEW IF EXISTS ${os_bi_coredw}.core_assignment_dm_view;

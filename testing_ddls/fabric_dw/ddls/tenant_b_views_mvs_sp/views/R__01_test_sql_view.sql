@@ -1,0 +1,3 @@
+CREATE OR ALTER VIEW ${OS_EAGLES_COREDW}.test_sql_view
+AS
+SELECT COUNT(*) AS schools FROM ${RS_COREDW}.dim_school;

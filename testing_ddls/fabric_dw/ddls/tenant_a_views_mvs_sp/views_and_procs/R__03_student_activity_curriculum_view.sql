@@ -1,0 +1,1 @@
+DROP VIEW IF EXISTS ${os_bi_coredw}.student_activity_curriculum_view;
