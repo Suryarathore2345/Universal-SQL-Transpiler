@@ -32,7 +32,7 @@ const PHASES_FULL = [
   { key: 'dark',       duration: 600 },
   { key: 'streams',    duration: 4200 },
   { key: 'core',       duration: 1600 },
-  { key: 'logo',       duration: 1000 },
+  { key: 'logo',       duration: 1500 },
   { key: 'hero',       duration: 1800 },
   { key: 'platforms',  duration: 1400 },
   { key: 'ready',      duration: null },
@@ -184,16 +184,16 @@ export default function LandingAnimation() {
           <motion.div
             ref={logoRef}
             className="landing-logo-block"
-            initial={{ scale: 0.3, opacity: 0 }}
+            initial={{ scale: 0.4, opacity: 0, filter: 'blur(24px)' }}
             animate={
               isTransitioning && dockTransform
-                ? { scale: dockTransform.scale, x: dockTransform.x, y: dockTransform.y, opacity: 1 }
-                : { scale: 1, opacity: 1 }
+                ? { scale: dockTransform.scale, x: dockTransform.x, y: dockTransform.y, opacity: 1, filter: 'blur(0px)' }
+                : { scale: 1, opacity: 1, filter: 'blur(0px)' }
             }
             transition={
               isTransitioning
                 ? { duration: 0.6, ease: [0.22, 1, 0.36, 1] }
-                : { duration: reduceMotion ? 0.3 : 0.6, ease: [0.16, 1, 0.3, 1] }
+                : { duration: reduceMotion ? 0.35 : 1.1, ease: [0.16, 1, 0.3, 1] }
             }
           >
             <motion.div
@@ -206,56 +206,62 @@ export default function LandingAnimation() {
         )}
 
         {showHeroText && !isTransitioning && (
-          <motion.div
-            className="landing-hero-text"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <h2>UNIVERSAL SQL TRANSPILER</h2>
-            <p>Write Once. Run Anywhere.</p>
-          </motion.div>
+          <div className="landing-hero-text">
+            <motion.h2
+              initial={{ opacity: 0, y: 18, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.8, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            >
+              UNIVERSAL SQL TRANSPILER
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 14, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.8, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
+            >
+              Write Once. Run Anywhere.
+            </motion.p>
+          </div>
         )}
 
         {showPlatforms && !isTransitioning && (
-          <motion.div
-            className="landing-platforms"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
-          >
+          <div className="landing-platforms">
             {PLATFORMS.map((p, i) => (
               <motion.span
                 key={p}
                 className="landing-platform-node"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.05 }}
+                initial={{ opacity: 0, y: 10, scale: 0.85, filter: 'blur(6px)' }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                transition={{ duration: 0.55, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
               >
                 {p}
               </motion.span>
             ))}
-          </motion.div>
+          </div>
         )}
 
         {showReadyCta && (
-          <motion.div
-            className="landing-cta"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <p className="landing-cta-line">
+          <div className="landing-cta">
+            <motion.p
+              className="landing-cta-line"
+              initial={{ opacity: 0, y: 16, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            >
               Ready to Transpile? Step Into the Universal SQL Transpiler World →
-            </p>
+            </motion.p>
             <motion.p
               className="landing-cta-hint"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: [0, 1, 0.5, 1, 0.5] }}
+              transition={{
+                opacity: { duration: 2.6, delay: 0.5, times: [0, 0.25, 0.45, 0.7, 1], repeat: Infinity, ease: 'easeInOut' },
+                y: { duration: 0.5, delay: 0.5 },
+              }}
             >
               CLICK ANYWHERE TO ENTER
             </motion.p>
-          </motion.div>
+          </div>
         )}
 
         {!isTransitioning && !showReadyCta && (
