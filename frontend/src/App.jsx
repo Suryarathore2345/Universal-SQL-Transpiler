@@ -126,7 +126,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [sourceSql, sourceDialect, targetDialect])
+  }, [sourceSql, sourceDialect, targetDialect, schemaMode, targetSchema])
 
   // Keyboard shortcut: Ctrl+Enter / Cmd+Enter
   useEffect(() => {
