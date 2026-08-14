@@ -510,6 +510,25 @@ button { cursor: pointer; font-family: inherit; }
   user-select: none;
 }
 
+/* Monaco's workbench-hover tooltip (shown over find-widget buttons like
+   "Next Match", "Close") can occasionally fail to dismiss on its own and
+   is left sitting on top of the button it describes, silently swallowing
+   every click meant for that button underneath. It's purely informational
+   text, never something a user needs to click into, so make it click-through
+   — the real control beneath it stays reachable no matter what state the
+   tooltip itself is stuck in. */
+.monaco-hover,
+.workbench-hover-container {
+  pointer-events: none;
+}
+/* The hover is portaled through Monaco's generic .context-view container,
+   which itself still intercepts clicks even once its content is
+   click-through — only disable it for the hover case specifically, since
+   .context-view is shared portal infrastructure other widgets rely on. */
+.context-view:has(.monaco-hover) {
+  pointer-events: none;
+}
+
 /* ── Center column (Transpile button) ── */
 .center-col {
   display: flex;
