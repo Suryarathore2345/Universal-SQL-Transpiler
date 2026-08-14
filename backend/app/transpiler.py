@@ -25,36 +25,99 @@ from app.sql_text_utils import split_statements as _split_statements
 # Dialect registry — add new dialects here as they are implemented
 # ---------------------------------------------------------------------------
 
+def _merge_common_tail(warnings: List[IRWarning]) -> List[IRWarning]:
+    """
+    Merge same-feature warnings whose messages differ (so _dedupe_warnings'
+    exact-match pass left them separate) but share a common explanatory tail
+    — the pattern several dialect generators use for per-column notices, e.g.
+    "Column 'status': DEFAULT 'pending' is NOT supported .... DEFAULT
+    constraints are not part of the ... surface area. The DEFAULT value has
+    been removed. Apply default logic in ..." repeated once per affected
+    column, with only the "Column 'x': ..." lead sentence actually differing.
+
+    Finds the longest run of trailing sentences identical across all
+    messages and collapses to one warning: each unique lead sentence,
+    followed by the shared tail once. Falls back to returning the warnings
+    unchanged if no non-trivial common tail exists (safe no-op for warning
+    types that don't follow this convention).
+    """
+    if len(warnings) < 2:
+        return warnings
+
+    sentence_lists = [w.message.split(". ") for w in warnings]
+    shortest = min(len(s) for s in sentence_lists)
+
+    common_len = 0
+    for i in range(1, shortest):  # leave at least 1 sentence unique per message
+        tails = {tuple(s[-i:]) for s in sentence_lists}
+        if len(tails) == 1:
+            common_len = i
+        else:
+            break
+
+    if common_len == 0:
+        return warnings
+
+    common_tail = ". ".join(sentence_lists[0][-common_len:])
+    leads = []
+    for sentences in sentence_lists:
+        lead = ". ".join(sentences[:-common_len]).rstrip()
+        if not lead:
+            return warnings  # a message is entirely the shared tail — leave separate
+        leads.append(lead if lead.endswith((".", "!", "?")) else lead + ".")
+
+    merged_message = " ".join(leads) + " " + common_tail
+    return [warnings[0].model_copy(update={"message": merged_message})]
+
+
 def _dedupe_warnings(warnings: List[IRWarning]) -> List[IRWarning]:
     """
-    Collapse warnings that repeat verbatim (same feature + message) into a
-    single entry, appending an occurrence count. A warning like
-    CONVERT_TIMEZONE_DYNAMIC_TZ naturally fires once per matching call site —
-    a query referencing the same column expression in ten places would
-    otherwise flood the panel with ten identical copies of the same notice.
-    """
-    counts: Dict[tuple, int] = {}
-    first_seen: Dict[tuple, IRWarning] = {}
-    order: List[tuple] = []
-    for w in warnings:
-        key = (w.feature, w.message)
-        if key not in first_seen:
-            first_seen[key] = w
-            counts[key] = 1
-            order.append(key)
-        else:
-            counts[key] += 1
+    Collapse repeated/near-duplicate warnings within the same feature so the
+    panel doesn't flood with one notice per occurrence:
 
-    deduped: List[IRWarning] = []
-    for key in order:
-        w = first_seen[key]
-        count = counts[key]
-        if count > 1:
-            w = w.model_copy(update={
-                "message": f"{w.message} (repeated {count}x in this statement)",
-            })
-        deduped.append(w)
-    return deduped
+    1. Exact-duplicate messages (same feature + message) collapse to one
+       entry with an occurrence count — e.g. CONVERT_TIMEZONE_DYNAMIC_TZ
+       naturally fires once per matching call site.
+    2. Distinct messages that remain within the same feature (e.g. one
+       DEFAULT_NOT_SUPPORTED_FABRIC_DW notice per affected column, each
+       naming a different column/value) are merged via _merge_common_tail
+       into a single notice listing every affected column.
+    """
+    groups: Dict[str, List[IRWarning]] = {}
+    order: List[str] = []
+    for w in warnings:
+        if w.feature not in groups:
+            groups[w.feature] = []
+            order.append(w.feature)
+        groups[w.feature].append(w)
+
+    result: List[IRWarning] = []
+    for feature in order:
+        # Phase 1: collapse exact-duplicate messages within this feature.
+        counts: Dict[str, int] = {}
+        first_seen: Dict[str, IRWarning] = {}
+        msg_order: List[str] = []
+        for w in groups[feature]:
+            if w.message not in first_seen:
+                first_seen[w.message] = w
+                counts[w.message] = 1
+                msg_order.append(w.message)
+            else:
+                counts[w.message] += 1
+
+        collapsed = []
+        for msg in msg_order:
+            w, count = first_seen[msg], counts[msg]
+            if count > 1:
+                w = w.model_copy(update={
+                    "message": f"{w.message} (repeated {count}x in this statement)",
+                })
+            collapsed.append(w)
+
+        # Phase 2: merge remaining distinct messages that share a common tail.
+        result.extend(_merge_common_tail(collapsed) if len(collapsed) > 1 else collapsed)
+
+    return result
 
 
 def _load_parsers() -> Dict[Dialect, DialectParser]:
