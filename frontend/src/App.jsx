@@ -23,7 +23,7 @@ import ConfidenceBadge from './components/ConfidenceBadge.jsx'
 import ReportDashboard from './components/ReportDashboard.jsx'
 import UploadButton from './components/UploadButton.jsx'
 import DownloadMenu from './components/DownloadMenu.jsx'
-import { fetchDialects, fetchLimitations, transpile } from './api/transpiler.js'
+import { fetchDialects, fetchLimitations, transpile, BASE as API_BASE } from './api/transpiler.js'
 import { DIALECT_COLORS, DIALECT_SAMPLES } from './data/dialectMeta.js'
 
 export default function App() {
@@ -188,7 +188,7 @@ export default function App() {
           </div>
           <a
             className="header-badge"
-            href="/api/docs"
+            href={`${API_BASE}/docs`}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -359,9 +359,9 @@ export default function App() {
       <footer className="app-footer">
         <span>Universal SQL Transpiler · v1.0</span>
         <span className="footer-sep">·</span>
-        <a href="/api/health" target="_blank" rel="noopener noreferrer">API health</a>
+        <a href={`${API_BASE}/health`} target="_blank" rel="noopener noreferrer">API health</a>
         <span className="footer-sep">·</span>
-        <a href="/api/docs" target="_blank" rel="noopener noreferrer">OpenAPI</a>
+        <a href={`${API_BASE}/docs`} target="_blank" rel="noopener noreferrer">OpenAPI</a>
         {lastResult && (
           <>
             <span className="footer-sep">·</span>

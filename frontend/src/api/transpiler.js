@@ -1,9 +1,11 @@
 /**
  * API client for the Universal SQL Transpiler backend.
- * All calls go through the Vite proxy → FastAPI on :8000.
+ * Locally this goes through the Vite proxy → FastAPI on :8000.
+ * In production (separate frontend/backend hosts), set VITE_API_BASE to the
+ * backend's full URL (e.g. https://ust-backend.onrender.com/api) at build time.
  */
 
-const BASE = '/api'
+export const BASE = import.meta.env.VITE_API_BASE || '/api'
 
 /**
  * Fetch all supported dialects with their metadata.
