@@ -3,6 +3,7 @@ CREATE TABLE [dbo].[orders] (
     [customer_id] INT NOT NULL,
     [amount] DECIMAL(18,2) NOT NULL,
     [status] VARCHAR(32),
-    [created_at] DATETIME2(6) NOT NULL,
-    PRIMARY KEY ([order_id])
+    [created_at] DATETIME2(6) NOT NULL
 );
+
+ALTER TABLE [dbo].[orders] ADD CONSTRAINT [PK_orders] PRIMARY KEY NONCLUSTERED ([order_id]) NOT ENFORCED;

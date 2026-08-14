@@ -16,7 +16,8 @@ Fabric DW NOT supported (verified June 2026 against T-SQL surface area page):
   - tinyint, money, datetime, datetimeoffset, nchar, nvarchar, text, image, xml, geography, geometry
   - Triggers, recursive CTEs, sequences
 
-NOT ENFORCED (defined but not validated at runtime):
+NOT ENFORCED, and cannot be declared inline inside CREATE TABLE — must be added
+afterward via ALTER TABLE ... ADD CONSTRAINT ... NOT ENFORCED:
   - PRIMARY KEY, UNIQUE, FOREIGN KEY
 
 Ref: https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area
@@ -80,10 +81,20 @@ class FabricDWGenerator(DialectGenerator):
             warnings.extend(w)
             doc_refs.extend(d)
 
+        # Fabric DW rejects PRIMARY KEY/FOREIGN KEY/UNIQUE declared inline inside
+        # CREATE TABLE ("The PRIMARY KEY keyword is not supported in the CREATE
+        # TABLE statement in this edition of SQL Server") — they can only be
+        # added afterward via ALTER TABLE ... ADD CONSTRAINT ... NOT ENFORCED.
+        # Docs: https://learn.microsoft.com/en-us/fabric/data-warehouse/table-constraints
+        alter_statements: List[str] = []
+
         if table.primary_key:
             pk_cols = ", ".join(self._quote_identifier(c) for c in table.primary_key.columns)
-            pk_name = f"CONSTRAINT {self._quote_identifier(table.primary_key.name)} " if table.primary_key.name else ""
-            lines.append(f"    {pk_name}PRIMARY KEY ({pk_cols})")
+            pk_name = table.primary_key.name or f"PK_{table.name}"
+            alter_statements.append(
+                f"ALTER TABLE {qname} ADD CONSTRAINT {self._quote_identifier(pk_name)} "
+                f"PRIMARY KEY NONCLUSTERED ({pk_cols}) NOT ENFORCED;"
+            )
 
         for fk in table.foreign_keys:
             cols = ", ".join(self._quote_identifier(c) for c in fk.columns)
@@ -91,13 +102,40 @@ class FabricDWGenerator(DialectGenerator):
             if fk.ref_schema:
                 ref_q = f"{self._quote_identifier(fk.ref_schema)}.{ref_q}"
             ref_cols = ", ".join(self._quote_identifier(c) for c in fk.ref_columns)
-            fk_name = f"CONSTRAINT {self._quote_identifier(fk.name)} " if fk.name else ""
-            lines.append(f"    {fk_name}FOREIGN KEY ({cols}) REFERENCES {ref_q} ({ref_cols})")
+            fk_name = fk.name or f"FK_{table.name}_{fk.ref_table}"
+            alter_statements.append(
+                f"ALTER TABLE {qname} ADD CONSTRAINT {self._quote_identifier(fk_name)} "
+                f"FOREIGN KEY ({cols}) REFERENCES {ref_q} ({ref_cols}) NOT ENFORCED;"
+            )
 
         for uq in table.unique_constraints:
             uq_cols = ", ".join(self._quote_identifier(c) for c in uq.columns)
-            uq_name = f"CONSTRAINT {self._quote_identifier(uq.name)} " if uq.name else ""
-            lines.append(f"    {uq_name}UNIQUE ({uq_cols})")
+            uq_name = uq.name or f"UQ_{table.name}_{'_'.join(uq.columns)}"
+            alter_statements.append(
+                f"ALTER TABLE {qname} ADD CONSTRAINT {self._quote_identifier(uq_name)} "
+                f"UNIQUE NONCLUSTERED ({uq_cols}) NOT ENFORCED;"
+            )
+
+        if alter_statements:
+            warnings.append(IRWarning(
+                feature="FABRIC_DW_CONSTRAINTS_NOT_ENFORCED",
+                message=(
+                    "Fabric DW does not allow PRIMARY KEY, FOREIGN KEY, or UNIQUE "
+                    "constraints inline inside CREATE TABLE — they were moved to "
+                    "separate ALTER TABLE ... ADD CONSTRAINT statements with NOT "
+                    "ENFORCED, since Fabric DW never validates these at write time "
+                    "(informational only, for the query optimizer)."
+                ),
+                doc_url="https://learn.microsoft.com/en-us/fabric/data-warehouse/table-constraints",
+                severity=Warningseverity.WARNING,
+                fallback_applied=True,
+            ))
+            doc_refs.append(IRDocReference(
+                title="Fabric DW table constraints",
+                url="https://learn.microsoft.com/en-us/fabric/data-warehouse/table-constraints",
+                platform="fabric_dw",
+                purpose="PRIMARY KEY/FOREIGN KEY/UNIQUE must be added via ALTER TABLE, NOT ENFORCED",
+            ))
 
         body = ",\n".join(lines)
         core_sql = f"CREATE TABLE {qname} (\n{body}\n)"
@@ -179,7 +217,10 @@ class FabricDWGenerator(DialectGenerator):
                 fallback_applied=True,
             ))
 
-        return sql + ";", warnings, doc_refs
+        full_sql = sql + ";"
+        if alter_statements:
+            full_sql += "\n\n" + "\n".join(alter_statements)
+        return full_sql, warnings, doc_refs
 
     def _column_def(
         self, col: IRColumn
