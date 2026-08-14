@@ -4,7 +4,8 @@ Convert SQL DDL — tables, views, materialized views, stored procedures, and fu
 
 Supported platforms: **Amazon Redshift · Snowflake · Microsoft SQL Server · Azure Synapse · Microsoft Fabric Data Warehouse · Microsoft Fabric Lakehouse · Databricks · Oracle · BigQuery**
 
-> Phase 1 free deployment (Render) is in progress — see the Architecture section for the current local/Docker setup.
+> **Live (Phase 1 testing):** [ust-frontend.onrender.com](https://ust-frontend.onrender.com) · API docs: [ust-backend-mgt0.onrender.com/api/docs](https://ust-backend-mgt0.onrender.com/api/docs)
+> Both run on Render's free tier — the backend sleeps after ~15 min idle, so the first request after a quiet period takes ~30-50s to cold-start.
 
 ---
 
