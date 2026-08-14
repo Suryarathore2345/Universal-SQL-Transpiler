@@ -4,6 +4,8 @@ Convert SQL DDL — tables, views, materialized views, stored procedures, and fu
 
 Supported platforms: **Amazon Redshift · Snowflake · Microsoft SQL Server · Azure Synapse · Microsoft Fabric Data Warehouse · Microsoft Fabric Lakehouse · Databricks · Oracle · BigQuery**
 
+> Phase 1 free deployment (Hugging Face Spaces) is in progress — see the Architecture section for the current local/Docker setup.
+
 ---
 
 ## Table of Contents
