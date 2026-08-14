@@ -24,6 +24,7 @@ import ReportDashboard from './components/ReportDashboard.jsx'
 import UploadButton from './components/UploadButton.jsx'
 import DownloadMenu from './components/DownloadMenu.jsx'
 import { fetchDialects, fetchLimitations, transpile, BASE as API_BASE } from './api/transpiler.js'
+import { replayIntro } from './components/LandingAnimation/LandingAnimation.jsx'
 import { DIALECT_COLORS, DIALECT_SAMPLES } from './data/dialectMeta.js'
 
 export default function App() {
@@ -359,6 +360,10 @@ export default function App() {
         <a href={`${API_BASE}/health`} target="_blank" rel="noopener noreferrer">API health</a>
         <span className="footer-sep">·</span>
         <a href={`${API_BASE}/docs`} target="_blank" rel="noopener noreferrer">OpenAPI</a>
+        <span className="footer-sep">·</span>
+        <button className="footer-report-btn" onClick={() => replayIntro()}>
+          Replay intro
+        </button>
         {lastResult && (
           <>
             <span className="footer-sep">·</span>

@@ -1,0 +1,173 @@
+/* ============================================================
+   UST Landing Animation — cinematic intro overlay
+   Dark navy/black base, electric blue / cyan / violet / magenta glows.
+   All motion uses transform/opacity only (GPU-friendly).
+   ============================================================ */
+
+.landing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #0b0f17 0%, #05070a 75%);
+  cursor: pointer;
+}
+
+.landing-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(124, 58, 237, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 50% 55%, rgba(34, 211, 238, 0.12) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.landing-lines {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, transparent, rgba(96, 165, 250, 0.08) 50%, transparent),
+    linear-gradient(to right, transparent, rgba(217, 70, 239, 0.06) 50%, transparent);
+  background-size: 100% 2px, 100% 1px;
+  background-position: 50% 35%, 50% 65%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* ── Phase 2: SQL data streams ── */
+.landing-streams {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.landing-token {
+  position: absolute;
+  left: 50%;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent-blue, #60a5fa);
+  text-shadow: 0 0 12px currentColor;
+  white-space: nowrap;
+}
+.landing-token:nth-child(3n+1) { color: #22d3ee; }
+.landing-token:nth-child(3n+2) { color: #a78bfa; }
+.landing-token:nth-child(3n)   { color: #d946ef; }
+
+/* ── Phase 3: transformation core arcs ── */
+.landing-core {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+}
+.landing-arc {
+  position: absolute;
+  inset: 0;
+  fill: none;
+}
+.landing-arc circle {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 140 400;
+}
+.landing-arc-a circle { stroke: #22d3ee; filter: drop-shadow(0 0 6px #22d3ee); }
+.landing-arc-b circle { stroke: #a78bfa; filter: drop-shadow(0 0 6px #a78bfa); }
+
+/* ── Phase 4/5/7: logo ── */
+.landing-logo-block {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 160px;
+  will-change: transform, opacity;
+}
+.landing-logo-glow {
+  position: absolute;
+  inset: -30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.45) 0%, rgba(34, 211, 238, 0.2) 45%, transparent 72%);
+  filter: blur(4px);
+}
+.landing-logo-img {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-lg, 12px);
+}
+
+/* ── Phase 5: hero text ── */
+.landing-hero-text {
+  margin-top: 28px;
+  text-align: center;
+}
+.landing-hero-text h2 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  background: linear-gradient(135deg, #a78bfa, #60a5fa, #22d3ee);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.landing-hero-text p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #8b949e);
+  letter-spacing: 0.06em;
+}
+
+/* ── Phase 6: supported platforms ── */
+.landing-platforms {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+  max-width: 560px;
+  padding: 0 24px;
+}
+.landing-platform-node {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #8b949e);
+  padding: 4px 10px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.06);
+}
+
+/* ── Skip hint ── */
+.landing-skip-hint {
+  position: absolute;
+  bottom: 28px;
+  font-size: 11px;
+  color: var(--text-muted, #484f58);
+  letter-spacing: 0.05em;
+}
+
+/* ── Responsive: fewer particles, smaller type ── */
+@media (max-width: 640px) {
+  .landing-token:nth-child(n+7) { display: none; }
+  .landing-core { width: 150px; height: 150px; }
+  .landing-logo-block { width: 110px; height: 110px; }
+  .landing-hero-text h2 { font-size: 15px; letter-spacing: 0.08em; }
+  .landing-platforms { max-width: 320px; gap: 6px 10px; }
+  .landing-platform-node { font-size: 10px; padding: 3px 8px; }
+}
+
+/* ── Reduced motion: no streams/core/platform choreography ── */
+@media (prefers-reduced-motion: reduce) {
+  .landing-lines,
+  .landing-glow { animation: none; }
+}
