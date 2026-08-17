@@ -266,17 +266,17 @@ _LIMITATIONS: dict[str, list[LimitationEntry]] = {
     # ── Databricks (Delta Lake) ───────────────────────────────────────────
     "databricks": [
         {
-            "feature": "NO_STORED_PROCEDURES",
-            "level": "error",
+            "feature": "STORED_PROCEDURES_REQUIRE_DBR17_UC",
+            "level": "info",
             "description": (
-                "Databricks SQL does not support CREATE PROCEDURE. "
-                "Stored procedures are converted to a SQL UDF stub that requires "
-                "significant manual adaptation. "
-                "Consider using Databricks Notebooks or Python UDFs for procedural logic."
+                "Databricks CREATE PROCEDURE (SQL scripting / ANSI SQL/PSM) requires "
+                "Databricks Runtime 17.0+ and Unity Catalog — not supported with the "
+                "Hive Metastore. The procedure body is generated as a BEGIN...END "
+                "compound statement and requires manual review of control-flow syntax."
             ),
             "doc_url": (
                 "https://docs.databricks.com/en/sql/language-manual/"
-                "sql-ref-syntax-ddl-create-sql-function.html"
+                "sql-ref-syntax-ddl-create-procedure.html"
             ),
             "sql_keywords": ["PROCEDURE"],
         },

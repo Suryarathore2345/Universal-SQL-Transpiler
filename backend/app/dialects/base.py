@@ -486,13 +486,13 @@ class DialectParser(ABC):
     ) -> Tuple[Optional[IRProcedure], List[IRWarning], List[IRDocReference]]:
         """
         Shared procedure parser: extract name, params, body, language from raw SQL.
-        body_style: 'dollar' | 'tsql' | 'oracle' | 'bigquery' | 'best_effort'
+        body_style: 'dollar' | 'tsql' | 'oracle' | 'bigquery' | 'databricks' | 'best_effort'
         """
         from app.dialects.procedure_utils import (
             extract_obj_name, extract_all_params, extract_language,
             extract_body_dollar_quote, extract_body_tsql, extract_body_oracle,
-            extract_body_bigquery, extract_body_best_effort, params_to_ir,
-            MANUAL_REVIEW_COMMENT,
+            extract_body_bigquery, extract_body_databricks, extract_body_best_effort,
+            params_to_ir, MANUAL_REVIEW_COMMENT,
         )
 
         name, schema, db = extract_obj_name(sql, "PROCEDURE")
@@ -505,6 +505,7 @@ class DialectParser(ABC):
             "tsql": extract_body_tsql,
             "oracle": extract_body_oracle,
             "bigquery": extract_body_bigquery,
+            "databricks": extract_body_databricks,
             "best_effort": extract_body_best_effort,
         }.get(body_style, extract_body_best_effort)
         body = body_fn(sql) or sql

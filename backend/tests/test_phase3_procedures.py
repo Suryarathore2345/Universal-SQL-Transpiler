@@ -73,9 +73,10 @@ class TestRedshiftProc:
 
     def test_redshift_proc_to_databricks(self):
         sql, warns, unsupported = transpile(REDSHIFT_PROC, "redshift", "databricks")
-        # Databricks has no stored procs — should emit a function stub with a warning
-        assert "FUNCTION" in sql or "-- Databricks" in sql
-        assert has_warning(unsupported + warns, "NOT_SUPPORTED") or has_warning(unsupported + warns, "DATABRICKS")
+        # Databricks (DBR 17.0+, Unity Catalog) now supports native CREATE PROCEDURE
+        assert "CREATE" in sql and "PROCEDURE" in sql
+        assert "BEGIN" in sql and "END" in sql
+        assert has_warning(unsupported + warns, "PROCEDURE_MANUAL_REVIEW") or has_warning(unsupported + warns, "DBR17")
 
 
 # ---------------------------------------------------------------------------
