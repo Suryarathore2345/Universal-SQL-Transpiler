@@ -2,7 +2,7 @@ CREATE TABLE `dbo`.`orders` (
   `order_id` INT64 NOT NULL,
   `customer_id` INT64 NOT NULL,
   `amount` NUMERIC(18,2) NOT NULL,
-  `status` STRING(32) DEFAULT 'pending',
+  `status` STRING DEFAULT 'pending',
   `created_at` DATETIME NOT NULL
 )
 CLUSTER BY `customer_id`;
