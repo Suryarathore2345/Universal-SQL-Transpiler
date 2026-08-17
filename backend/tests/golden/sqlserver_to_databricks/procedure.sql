@@ -1,10 +1,8 @@
--- Databricks does NOT support CREATE PROCEDURE.
--- Docs: https://docs.databricks.com/en/sql/language-manual/
--- Converted to a SQL UDF. Body requires significant manual adaptation.
-CREATE FUNCTION `dbo`.`upsert_order`()
-RETURNS STRING
-RETURN (
-  -- -- Translated from unknown → databricks
+CREATE PROCEDURE `dbo`.`upsert_order`()
+LANGUAGE SQL
+SQL SECURITY INVOKER
+AS BEGIN
+-- Translated from sql → databricks
 -- ============================================================
 -- MANUAL REVIEW REQUIRED
 -- The procedural body has been preserved from the source dialect.
@@ -15,10 +13,8 @@ RETURN (
 --   4. Transaction control
 --   5. Dialect-specific built-in functions
 -- ============================================================
-  -- Original body preserved below — NOT executable as-is:
-  -- BEGIN
-  --     INSERT INTO dbo.orders(order_id, amount)
-  --     VALUES (@p_order_id, @p_amount);
-  -- END
-  NULL
-);
+BEGIN
+    INSERT INTO dbo.orders(order_id, amount)
+    VALUES (@p_order_id, @p_amount);
+END
+END;

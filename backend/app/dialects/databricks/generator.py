@@ -261,48 +261,62 @@ class DatabricksGenerator(DialectGenerator):
         self, proc: IRProcedure
     ) -> Tuple[str, List[IRWarning], List[IRDocReference]]:
         """
-        Databricks does NOT support stored procedures.
-        Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function.html
+        Databricks CREATE PROCEDURE (SQL scripting / ANSI SQL/PSM).
+        Requires Databricks Runtime 17.0+ and Unity Catalog.
+        Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html
+        Scripting reference: https://docs.databricks.com/en/sql/language-manual/sql-ref-scripting.html
 
-        Fallback: emit as a SQL UDF with a prominent warning. The procedure body
-        is preserved inside the UDF for manual conversion.
+        Body is a compound statement (BEGIN ... END). The source body is
+        preserved as-is inside BEGIN/END with a manual-review warning, since
+        SQL/PSM control-flow syntax (DECLARE, IF, WHILE, handlers, etc.)
+        differs from other dialects' procedural syntax.
         """
-        from app.dialects.procedure_utils import format_param_databricks, format_body_comment
+        from app.dialects.procedure_utils import format_param_databricks_procedure, format_body_comment
         doc_refs = [IRDocReference(
-            title="Databricks CREATE FUNCTION (no stored procedures)",
-            url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function.html",
+            title="Databricks CREATE PROCEDURE",
+            url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html",
             platform="databricks",
-            purpose="Procedure-to-function fallback reference",
+            purpose="Stored procedure generation reference",
+        ), IRDocReference(
+            title="Databricks SQL scripting (compound statements, control flow)",
+            url="https://docs.databricks.com/en/sql/language-manual/sql-ref-scripting.html",
+            platform="databricks",
+            purpose="Procedure body scripting syntax reference",
         )]
         qname = self._qualified_name(proc)
-        params_str = ", ".join(format_param_databricks(p, self.mapper, self.dialect) for p in proc.parameters)
+        params_str = ", ".join(
+            format_param_databricks_procedure(p, self.mapper, self.dialect) for p in proc.parameters
+        )
         or_replace = "OR REPLACE " if proc.or_replace else ""
-        body_comment = format_body_comment(proc.language or "unknown", "databricks", proc.language)
+        body_comment = format_body_comment(proc.language or "sql", "databricks", proc.language)
+        comment_clause = f"\nCOMMENT '{proc.comment}'" if proc.comment else ""
         sql = (
-            f"-- Databricks does NOT support CREATE PROCEDURE.\n"
-            f"-- Docs: https://docs.databricks.com/en/sql/language-manual/\n"
-            f"-- Converted to a SQL UDF. Body requires significant manual adaptation.\n"
-            f"CREATE {or_replace}FUNCTION {qname}({params_str})\n"
-            f"RETURNS STRING\n"
-            f"RETURN (\n"
-            f"  -- {body_comment}\n"
-            f"  -- Original body preserved below — NOT executable as-is:\n"
-            f"  -- {proc.body.replace(chr(10), chr(10) + '  -- ')}\n"
-            f"  NULL\n"
-            f");"
+            f"CREATE {or_replace}PROCEDURE {qname}({params_str})\n"
+            f"LANGUAGE SQL\n"
+            f"SQL SECURITY INVOKER{comment_clause}\n"
+            f"AS BEGIN\n"
+            f"{body_comment}\n"
+            f"{proc.body}\n"
+            f"END;"
         )
         return sql, [
             IRWarning(
-                feature="PROCEDURE_NOT_SUPPORTED_DATABRICKS",
-                message="Databricks does not support stored procedures. "
-                        "The procedure has been converted to a SQL UDF stub. "
-                        "Procedural logic (loops, cursors, IF/ELSE, PRINT) is not supported in SQL UDFs. "
-                        "Consider refactoring as a Databricks Notebook or Python UDF. "
-                        "Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function.html",
+                feature="PROCEDURE_REQUIRES_DBR17_UC",
+                message="Databricks CREATE PROCEDURE requires Databricks Runtime 17.0+ and "
+                        "Unity Catalog (not supported with Hive Metastore). "
+                        "Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html",
+                doc_url="https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html",
+                severity=Warningseverity.INFO,
+            ),
+            IRWarning(
+                feature="PROCEDURE_MANUAL_REVIEW",
+                message="Procedure body requires manual review for Databricks SQL scripting "
+                        "(ANSI SQL/PSM) syntax — DECLARE, IF/CASE, WHILE/REPEAT/LOOP, "
+                        "DECLARE...HANDLER, and SIGNAL/RESIGNAL differ from other dialects' "
+                        "procedural syntax. "
+                        "Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-scripting.html",
                 severity=Warningseverity.WARNING,
-                unsupported=True,
-                fallback_applied=True,
-            )
+            ),
         ], doc_refs
 
     def generate_function(

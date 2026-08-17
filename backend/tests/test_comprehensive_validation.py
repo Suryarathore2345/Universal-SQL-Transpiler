@@ -1128,13 +1128,31 @@ class TestProcedures:
         assert "BEGIN" in out
         assert "END" in out
 
-    def test_databricks_proc_to_function(self):
-        """Databricks has no stored procedures — converts to SQL UDF stub.
-        Ref: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function.html"""
+    def test_databricks_proc_create_procedure(self):
+        """Databricks (DBR 17.0+, Unity Catalog) supports native CREATE PROCEDURE
+        with a BEGIN...END compound statement.
+        Ref: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html"""
         sql = "CREATE OR REPLACE PROCEDURE s.myproc(p_id INTEGER) LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;"
         out = _sql("redshift", "databricks", sql)
-        assert "CREATE" in out and "FUNCTION" in out
-        assert "-- Databricks does NOT support CREATE PROCEDURE" in out
+        assert "CREATE OR REPLACE PROCEDURE" in out
+        assert "LANGUAGE SQL" in out
+        assert "SQL SECURITY INVOKER" in out
+        assert "BEGIN" in out and "END" in out
+        assert "FUNCTION" not in out
+
+    def test_databricks_proc_native_roundtrip(self):
+        """Databricks CREATE PROCEDURE with IN/OUT params parses and regenerates."""
+        sql = (
+            "CREATE OR REPLACE PROCEDURE s.add(x INT, y INT, OUT total INT)\n"
+            "LANGUAGE SQL\n"
+            "SQL SECURITY INVOKER\n"
+            "AS BEGIN\n"
+            "  SET total = x + y;\n"
+            "END;"
+        )
+        out = _sql("databricks", "databricks", sql)
+        assert "CREATE OR REPLACE PROCEDURE" in out
+        assert "OUT total" in out
 
     def test_bigquery_proc_begin_end(self):
         """BigQuery procedures use BEGIN...END.

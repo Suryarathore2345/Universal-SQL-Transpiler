@@ -124,14 +124,14 @@ The IR layer is what keeps this tractable at 9 dialects: adding a new one requir
 | Synapse | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Fabric DW | ✅ | ✅ | ❌ ³ | ✅ | ✅ |
 | Fabric Lakehouse | ✅ | ✅ | ✅ ⁵ | ❌ ⁶ | ✅ |
-| Databricks | ✅ | ✅ | ✅ | ⚠️ ⁴ | ✅ |
+| Databricks | ✅ | ✅ | ✅ | ✅ ⁴ | ✅ |
 | Oracle | ✅ | ✅ | ✅ | ✅ | ✅ |
 | BigQuery | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ¹ Requires Enterprise Edition or higher.
 ² Converted to indexed view with `WITH SCHEMABINDING` — query may need adjustments.
 ³ Converted to a regular VIEW — no automatic refresh.
-⁴ Converted to a SQL UDF stub — significant manual adaptation required.
+⁴ Requires Databricks Runtime 17.0+ and Unity Catalog (not supported with Hive Metastore).
 ⁵ Materialized Lake Views (MLV) require Fabric Runtime 1.3+.
 ⁶ No stored procedures on Spark SQL — converted to a SQL function stub; use a Fabric Notebook for real procedural logic.
 
@@ -166,7 +166,7 @@ UST does not pretend every conversion is identical — every changed, dropped, u
 | SQL Server | MV → indexed view, SELECT must use two-part names | warn |
 | Synapse | Every table needs explicit DISTRIBUTION | warn |
 | Fabric DW | No materialized views | **error** |
-| Databricks | No stored procedures → UDF stub | **error** |
+| Databricks | Stored procedures require DBR 17.0+ and Unity Catalog | info |
 | Databricks | CLUSTER BY and PARTITIONED BY are mutually exclusive | warn |
 | Oracle | DATE type includes time component | info |
 | BigQuery | No IDENTITY columns | warn |
