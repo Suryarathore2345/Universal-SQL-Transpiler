@@ -178,74 +178,14 @@ Full limitations are returned by `GET /api/limitations` and shown in the UI's li
 
 ## API Reference
 
-The backend exposes endpoints under `/api`. Interactive docs: [ust-backend-mgt0.onrender.com/api/docs](https://ust-backend-mgt0.onrender.com/api/docs) (or `http://localhost:8000/api/docs` locally).
+The backend exposes endpoints under `/api`. Full interactive docs (request/response schemas, live "Try it out"): [ust-backend-mgt0.onrender.com/api/docs](https://ust-backend-mgt0.onrender.com/api/docs) (or `http://localhost:8000/api/docs` locally).
 
-```http
-POST /api/transpile
-GET  /api/dialects
-GET  /api/limitations
-GET  /api/health
-```
-
-### `POST /api/transpile`
-
-Convert SQL from one dialect to another.
-
-**Request body**
-
-```json
-{
-  "sql": "CREATE TABLE ...",
-  "source_dialect": "redshift",
-  "target_dialect": "snowflake",
-  "object_type": null,
-  "include_ir": false
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `sql` | string | Yes | Raw SQL DDL (one or more statements) |
-| `source_dialect` | string | Yes | Source platform key (see dialect keys below) |
-| `target_dialect` | string | Yes | Target platform key |
-| `object_type` | string | No | Type hint: `table`, `view`, `materialized_view`, `procedure`, `function` |
-| `include_ir` | boolean | No | Include serialized IR snapshot for debugging |
-
-**Response**
-
-```json
-{
-  "converted_sql": "CREATE OR REPLACE TABLE ...",
-  "source_dialect": "redshift",
-  "target_dialect": "snowflake",
-  "object_type": "table",
-  "warnings": [
-    {
-      "feature": "SORTKEY_TO_CLUSTER_BY",
-      "message": "Redshift SORTKEY converted to CLUSTER BY ...",
-      "severity": "info",
-      "doc_url": "https://docs.snowflake.com/...",
-      "fallback_applied": true
-    }
-  ],
-  "unsupported_features": [],
-  "doc_references": [...],
-  "warning_count": 1,
-  "has_unsupported": false
-}
-```
-
-### `GET /api/dialects`
-
-List all supported dialects with display metadata.
-
-### `GET /api/limitations`
-
-Return known transpilation limitations for target dialects. Optional query parameter: `?dialect=snowflake`
-
-### `GET /api/health`
-
-Liveness probe. Returns `{ "status": "ok", "version": "1.0.0", "dialects_loaded": 9 }`.
+| Endpoint | Description |
+|---|---|
+| `POST /api/transpile` | Convert SQL from one dialect to another. Body: `sql`, `source_dialect`, `target_dialect`, optional `object_type` and `include_ir`. Returns converted SQL plus warnings, unsupported features, and doc references. |
+| `GET /api/dialects` | List all supported dialects with display metadata. |
+| `GET /api/limitations` | Known transpilation limitations for target dialects. Optional `?dialect=snowflake`. |
+| `GET /api/health` | Liveness probe — `{ "status": "ok", "version": "1.0.0", "dialects_loaded": 9 }`. |
 
 **Dialect keys**
 
