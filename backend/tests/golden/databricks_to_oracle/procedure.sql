@@ -15,8 +15,6 @@ BEGIN
 --   4. Transaction control
 --   5. Dialect-specific built-in functions
 -- ============================================================
-BEGIN
-    INSERT INTO analytics.orders(order_id, amount)
+INSERT INTO analytics.orders(order_id, amount)
     VALUES (p_order_id, p_amount);
-END;
 END upsert_order;

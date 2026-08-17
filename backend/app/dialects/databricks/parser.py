@@ -79,9 +79,10 @@ class DatabricksParser(DialectParser):
         if re.search(r'\bCREATE\b.*?\bFUNCTION\b', sql, re.IGNORECASE | re.DOTALL):
             r, w, d = self._parse_func_from_sql(sql, body_style="dollar")
             return r, warnings + w, d
-        # Databricks has no stored procedures — treat any PROCEDURE as FUNCTION
+        # Databricks CREATE PROCEDURE (DBR 17.0+, Unity Catalog): body is a
+        # BEGIN ... END compound statement, not dollar-quoted.
         if re.search(r'\bCREATE\b.*?\bPROCEDURE\b', sql, re.IGNORECASE | re.DOTALL):
-            r, w, d = self._parse_proc_from_sql(sql, body_style="dollar")
+            r, w, d = self._parse_proc_from_sql(sql, body_style="databricks")
             return r, warnings + w, d
 
         warnings.append(IRWarning(feature="UNSUPPORTED_STATEMENT", message=f"Not supported: {type(parsed).__name__}", severity=Warningseverity.WARNING))

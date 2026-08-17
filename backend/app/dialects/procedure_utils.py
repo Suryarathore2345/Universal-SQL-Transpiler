@@ -88,6 +88,20 @@ def extract_body_bigquery(sql: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+def extract_body_databricks(sql: str) -> str:
+    """
+    Extract Databricks CREATE PROCEDURE body: the AS BEGIN ... END compound
+    statement. Anchored on the first BEGIN after AS and the LAST END in the
+    string (rather than end-of-string), so it tolerates trailing characters
+    a non-native source body may carry (e.g. a stray ';' or dollar-quote).
+    """
+    m = re.search(r'\bAS\b\s*BEGIN\b(.*)\bEND\b', sql, re.IGNORECASE | re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r'\bBEGIN\b(.*)\bEND\b', sql, re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
 def extract_body_best_effort(sql: str) -> str:
     """
     Try all body extraction strategies, return first non-empty match.
@@ -357,6 +371,19 @@ def format_param_bigquery(p: IRParameter, mapper, target_dialect: Dialect) -> st
 
 
 def format_param_databricks(p: IRParameter, mapper, target_dialect: Dialect) -> str:
-    """Format as Databricks Python UDF: name TYPE"""
+    """Format as Databricks UDF parameter (CREATE FUNCTION): name TYPE — no IN/OUT modes."""
     type_str, _, _ = mapper.generic_to_target(p.data_type.generic_type, target_dialect, p.data_type.precision, p.data_type.scale, p.data_type.length)
     return f"{p.name} {type_str}"
+
+
+def format_param_databricks_procedure(p: IRParameter, mapper, target_dialect: Dialect) -> str:
+    """
+    Format as Databricks CREATE PROCEDURE parameter (DBR 17.0+):
+    [IN|OUT|INOUT] name TYPE [DEFAULT default]
+    OUT/INOUT parameters cannot have a DEFAULT.
+    Docs: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-procedure.html
+    """
+    type_str, _, _ = mapper.generic_to_target(p.data_type.generic_type, target_dialect, p.data_type.precision, p.data_type.scale, p.data_type.length)
+    mode = p.mode if p.mode in ('IN', 'OUT', 'INOUT') else 'IN'
+    default = f" DEFAULT {p.default_value}" if p.default_value and mode == 'IN' else ""
+    return f"{mode} {p.name} {type_str}{default}"
