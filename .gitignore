@@ -33,3 +33,9 @@ Thumbs.db
 # QA runner generated output
 testing_ddls/qa_report*.html
 testing_ddls/qa_output.txt
+
+# Local-only reference material (kept on disk, not tracked)
+testing_ddls/benchmark_datasets/
+QA_Review_Report.md
+Real-World SQL Benchmark Dataset Research Blueprint for the Universal SQL Transpiler.md
+SQL-Transpiler-Master-Prompt.md
