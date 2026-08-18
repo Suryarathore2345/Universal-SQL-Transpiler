@@ -45,9 +45,18 @@ export async function fetchLimitations(dialect, source) {
  * @param {string} params.targetDialect
  * @param {boolean} [params.includeIr]
  * @param {string|null} [params.targetSchema]  Dynamic schema override (null = hardcoded)
+ * @param {Array<{table:string,column:string,length:number}>} [params.columnOverrides]
+ *   Per-column string-length overrides — only meaningful when the "customize
+ *   string lengths" toggle is on and the previous response returned
+ *   length_decisions. Omit entirely for default behavior.
+ * @param {number|null} [params.defaultTextLength]  Bulk length applied to any
+ *   flagged column without a more specific columnOverrides entry.
  * @returns {Promise<Object>} TranspileResponse
  */
-export async function transpile({ sql, sourceDialect, targetDialect, includeIr = false, targetSchema = null }) {
+export async function transpile({
+  sql, sourceDialect, targetDialect, includeIr = false, targetSchema = null,
+  columnOverrides = null, defaultTextLength = null,
+}) {
   const body = {
     sql,
     source_dialect: sourceDialect,
@@ -55,6 +64,8 @@ export async function transpile({ sql, sourceDialect, targetDialect, includeIr =
     include_ir: includeIr,
   }
   if (targetSchema) body.target_schema = targetSchema
+  if (columnOverrides && columnOverrides.length) body.column_overrides = columnOverrides
+  if (defaultTextLength) body.default_text_length = defaultTextLength
 
   const res = await fetch(`${BASE}/transpile`, {
     method: 'POST',

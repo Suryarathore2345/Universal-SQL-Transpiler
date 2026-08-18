@@ -166,7 +166,18 @@ class TypeMapper:
                 continue
             primary = entry.get("type", "").upper()
             aliases = [a.upper() for a in entry.get("aliases", [])]
-            if bare == primary or bare in aliases:
+            # Some dialects (Databricks, BigQuery, Fabric Lakehouse/Spark SQL)
+            # represent both a bounded VARCHAR/CHAR and the unbounded TEXT
+            # generic type as the same bare native token ("STRING") — VARCHAR/
+            # CHAR list it only as their *primary* type (no aliases), while
+            # TEXT's entry for these dialects is the type's true home. Without
+            # this opt-out, VARCHAR/CHAR (defined earlier in the file) would
+            # always win the tie and bare "STRING" would be misclassified as
+            # a bounded type with no length, instead of unbounded TEXT.
+            # aliases (e.g. explicit "VARCHAR(50)") still match normally —
+            # only the bare-primary claim is disabled.
+            primary_disabled = entry.get("primary_reverse_match") is False
+            if (bare == primary and not primary_disabled) or bare in aliases:
                 try:
                     g = GenericType(generic_name)
                 except ValueError:
@@ -312,6 +323,27 @@ class TypeMapper:
                 return f"{base_type}({effective})"
             return base_type
 
+        # Unbounded TEXT targeting a dialect whose native equivalent is a
+        # bounded VARCHAR family member (Fabric DW/Synapse/Redshift) needs a
+        # concrete length picked somehow. `length_configurable` entries carry
+        # a documented default; a caller-supplied `length` (a user override,
+        # e.g. from the length-decisions API flow) takes precedence over it.
+        # length == -1 is the sentinel for "explicitly use the dialect's MAX
+        # keyword" when the dialect supports one (allows_max).
+        if generic_type == GenericType.TEXT and dialect_entry.get("length_configurable"):
+            if length == -1:
+                if dialect_entry.get("allows_max"):
+                    return dialect_entry.get("max_type", base_type)
+                length = dialect_entry.get("max_length")
+            effective = length if length is not None else dialect_entry.get("default_length")
+            if effective is None:
+                return base_type
+            max_len = dialect_entry.get("max_length")
+            if max_len:
+                effective = min(effective, max_len)
+            bounded_base = dialect_entry.get("bounded_base_type", "VARCHAR")
+            return f"{bounded_base}({effective})"
+
         # Timestamp precision
         if generic_type in (GenericType.TIMESTAMP, GenericType.TIMESTAMP_TZ, GenericType.TIMESTAMP_LTZ):
             max_prec = dialect_entry.get("max_precision", 9)
@@ -328,6 +360,23 @@ class TypeMapper:
 
     def get_identity_info(self, dialect: Dialect) -> Dict[str, Any]:
         return self._identity.get(dialect.value, {})
+
+    def get_text_length_config(self, target_dialect: Dialect) -> Optional[Dict[str, Any]]:
+        """
+        Returns the length-configuration metadata for GenericType.TEXT on this
+        target dialect, or None if the dialect's TEXT equivalent is natively
+        unbounded (STRING/CLOB/TEXT) and has no length to configure. Used to
+        surface the "column length decisions" list to API callers so they can
+        override the dialect's default bounded length per column.
+        """
+        entry = self._mappings.get(GenericType.TEXT.value, {}).get("dialects", {}).get(target_dialect.value, {})
+        if not entry.get("length_configurable"):
+            return None
+        return {
+            "default_length": entry.get("default_length"),
+            "max_length": entry.get("max_length"),
+            "allows_max": entry.get("allows_max", False),
+        }
 
 
 # ---------------------------------------------------------------------------

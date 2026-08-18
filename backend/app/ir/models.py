@@ -597,6 +597,24 @@ class IRDocReference(BaseModel):
     purpose: str = ""  # Why this doc was consulted
 
 
+class ColumnLengthDecision(BaseModel):
+    """
+    Flags one column whose source type was an unbounded string (e.g.
+    Databricks/BigQuery/Fabric Lakehouse STRING) but the target dialect only
+    has a bounded VARCHAR-family native type, so a default length had to be
+    picked. Callers may resubmit the request with a `column_overrides` entry
+    for this (table, column) to choose a different length instead of the
+    default. Only emitted for columns where no override was already applied.
+    """
+    table: str
+    column: str
+    source_type: str
+    applied_default: int
+    min_length: int = 1
+    max_length: int
+    allows_max: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Transpilation result
 # ---------------------------------------------------------------------------
@@ -620,6 +638,10 @@ class TranspileResult(BaseModel):
     unsupported_features: List[IRWarning] = Field(default_factory=list)
     doc_references: List[IRDocReference] = Field(default_factory=list)
     ir_snapshot: Optional[Dict[str, Any]] = None  # Serialized IR for debugging
+
+    # Columns whose length was defaulted rather than user-specified — opt-in
+    # UI flow lets the caller resubmit with column_overrides to change them.
+    length_decisions: List[ColumnLengthDecision] = Field(default_factory=list)
 
     # Confidence scoring (Phase 8)
     # HIGH (1.0) → no issues; PARTIAL (0.65-0.99) → warnings exist;

@@ -17,6 +17,7 @@ import { useEffect, useState, useCallback } from 'react'
 import SqlEditor from './components/SqlEditor.jsx'
 import DialectSelector from './components/DialectSelector.jsx'
 import WarningsPanel from './components/WarningsPanel.jsx'
+import ColumnLengthsPanel from './components/ColumnLengthsPanel.jsx'
 import DocRefsPanel from './components/DocRefsPanel.jsx'
 import LimitationsPanel from './components/LimitationsPanel.jsx'
 import ConfidenceBadge from './components/ConfidenceBadge.jsx'
@@ -44,6 +45,14 @@ export default function App() {
   // Schema toggle — "hardcoded" (null) or "dynamic" (user-set schema name)
   const [schemaMode, setSchemaMode]     = useState('hardcoded')  // 'hardcoded' | 'dynamic'
   const [targetSchema, setTargetSchema] = useState('')
+
+  // Column-length customization — off by default (default backend behavior
+  // applies untouched). Only when toggled on does the panel appear, and only
+  // if the response actually has decisions to make (e.g. Databricks STRING
+  // → Fabric DW). lengthOverrides is keyed by "table::column" -> number|null.
+  const [customizeLengths, setCustomizeLengths] = useState(false)
+  const [lengthDecisions, setLengthDecisions]   = useState([])
+  const [lengthOverrides, setLengthOverrides]   = useState({})
 
   // Phase 8 — confidence + report
   const [confidenceScore, setConfidenceScore] = useState(null)
@@ -78,6 +87,8 @@ export default function App() {
     setConfidenceScore(null)
     setConfidenceLevel(null)
     setLastResult(null)
+    setLengthDecisions([])
+    setLengthOverrides({})
   }, [])
 
   const handleSwap = useCallback(() => {
@@ -93,6 +104,8 @@ export default function App() {
     setConfidenceScore(null)
     setConfidenceLevel(null)
     setLastResult(null)
+    setLengthDecisions([])
+    setLengthOverrides({})
   }, [sourceDialect, targetDialect, sourceSql, targetSql])
 
   const handleTranspile = useCallback(async () => {
@@ -107,12 +120,24 @@ export default function App() {
     setConfidenceLevel(null)
     setLastResult(null)
 
+    // Only sent when the toggle is on — otherwise the backend sees no
+    // column_overrides at all and behaves exactly as it always has.
+    const columnOverrides = customizeLengths
+      ? Object.entries(lengthOverrides)
+          .filter(([, length]) => length !== null && length !== undefined && length !== '')
+          .map(([key, length]) => {
+            const [table, column] = key.split('::')
+            return { table, column, length: Number(length) }
+          })
+      : null
+
     try {
       const result = await transpile({
         sql: sourceSql,
         sourceDialect,
         targetDialect,
         targetSchema: schemaMode === 'dynamic' && targetSchema.trim() ? targetSchema.trim() : null,
+        columnOverrides,
       })
       setTargetSql(result.converted_sql)
       setWarnings(result.warnings ?? [])
@@ -121,12 +146,25 @@ export default function App() {
       setConfidenceScore(result.confidence_score ?? null)
       setConfidenceLevel(result.confidence_level ?? null)
       setLastResult(result)
+      setLengthDecisions(customizeLengths ? (result.length_decisions ?? []) : [])
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [sourceSql, sourceDialect, targetDialect, schemaMode, targetSchema])
+  }, [sourceSql, sourceDialect, targetDialect, schemaMode, targetSchema, customizeLengths, lengthOverrides])
+
+  // Toggling off is a clean reset — no half-applied overrides linger.
+  const handleToggleCustomizeLengths = useCallback(() => {
+    setCustomizeLengths(v => {
+      const next = !v
+      if (!next) {
+        setLengthDecisions([])
+        setLengthOverrides({})
+      }
+      return next
+    })
+  }, [])
 
   // Keyboard shortcut: Ctrl+Enter / Cmd+Enter
   useEffect(() => {
@@ -157,6 +195,8 @@ export default function App() {
     setConfidenceScore(null)
     setConfidenceLevel(null)
     setLastResult(null)
+    setLengthDecisions([])
+    setLengthOverrides({})
   }, [])
 
   const srcDialect = dialects.find(d => d.key === sourceDialect)
@@ -223,13 +263,25 @@ export default function App() {
                 label="Target dialect"
                 value={targetDialect}
                 dialects={dialects}
-                onChange={v => { setTgt(v); setTargetSql(''); setError(null); setConfidenceScore(null); setLastResult(null) }}
+                onChange={v => { setTgt(v); setTargetSql(''); setError(null); setConfidenceScore(null); setLastResult(null); setLengthDecisions([]); setLengthOverrides({}) }}
                 disabled={loading}
               />
             </>
           ) : (
             <div className="loading-dialects">Loading dialects…</div>
           )}
+        </div>
+
+        {/* ── Advanced options row ── */}
+        <div className="options-row">
+          <button
+            className={`btn-schema-mode ${customizeLengths ? 'btn-schema-mode--active' : ''}`}
+            onClick={handleToggleCustomizeLengths}
+            disabled={loading}
+            title="When on, columns whose source type is an unbounded string (e.g. Databricks STRING) let you pick the target VARCHAR length instead of using the dialect default"
+          >
+            Customize string lengths: {customizeLengths ? 'On' : 'Off'}
+          </button>
         </div>
 
         {/* ── Editors ── */}
@@ -340,6 +392,16 @@ export default function App() {
             <span>{error}</span>
             <button className="error-dismiss" onClick={() => setError(null)}>✕</button>
           </div>
+        )}
+
+        {/* ── Column length decisions — only when the toggle is on and the
+             last response actually had unbounded-string columns to decide ── */}
+        {customizeLengths && (
+          <ColumnLengthsPanel
+            decisions={lengthDecisions}
+            overrides={lengthOverrides}
+            onChange={setLengthOverrides}
+          />
         )}
 
         {/* ── Notices ── */}

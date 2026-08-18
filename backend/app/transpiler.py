@@ -10,11 +10,11 @@ from __future__ import annotations
 import time
 from typing import Dict, List, Optional, Type
 
-from app.dialects.base import DialectGenerator, DialectParser
+from app.dialects.base import DialectGenerator, DialectParser, TypeMapper
 from app.ir.models import (
-    Dialect, IRDDLObject, IRDocReference, IRFunction, IRMaterializedView,
-    IRProcedure, IRTable, IRTrigger, IRView, IRWarning, ObjectType,
-    TranspiledObject, TranspileResult, Warningseverity,
+    ColumnLengthDecision, Dialect, GenericType, IRDDLObject, IRDocReference,
+    IRFunction, IRMaterializedView, IRProcedure, IRTable, IRTrigger, IRView,
+    IRWarning, ObjectType, TranspiledObject, TranspileResult, Warningseverity,
 )
 from app.validator import validate_residuals, compute_confidence
 from app.query_transpiler import detect_statement_type, transpile_script, transpile_query
@@ -68,6 +68,72 @@ def _merge_common_tail(warnings: List[IRWarning]) -> List[IRWarning]:
 
     merged_message = " ".join(leads) + " " + common_tail
     return [warnings[0].model_copy(update={"message": merged_message})]
+
+
+def _qualified_table_name(ir_table: IRTable) -> str:
+    return ".".join(p for p in (ir_table.database_name, ir_table.schema_name, ir_table.name) if p)
+
+
+def _table_matches(ir_table: IRTable, override_table: str) -> bool:
+    override_table = override_table.strip().lower()
+    return override_table in (
+        _qualified_table_name(ir_table).lower(),
+        (ir_table.name or "").lower(),
+    )
+
+
+def _apply_column_overrides(
+    ir_table: IRTable,
+    column_overrides: Optional[List[Dict[str, object]]],
+    default_text_length: Optional[int],
+) -> None:
+    """
+    Patch IRColumn.data_type.length in place for TEXT-generic columns that
+    have a matching column_overrides entry, or fall back to
+    default_text_length for any TEXT column left unmatched. Only TEXT is
+    eligible — VARCHAR/CHAR already carry an explicit length from the source.
+    """
+    matching_overrides = [
+        o for o in (column_overrides or [])
+        if _table_matches(ir_table, str(o.get("table", "")))
+    ]
+    for col in ir_table.columns:
+        if col.data_type.generic_type != GenericType.TEXT:
+            continue
+        override = next(
+            (o for o in matching_overrides if str(o.get("column", "")).lower() == col.name.lower()),
+            None,
+        )
+        if override is not None and override.get("length") is not None:
+            col.data_type.length = int(override["length"])
+        elif default_text_length is not None:
+            col.data_type.length = int(default_text_length)
+
+
+def _collect_length_decisions(
+    ir_table: IRTable, target_dialect: Dialect, mapper: "TypeMapper",
+) -> List[ColumnLengthDecision]:
+    """
+    After overrides are applied, any TEXT column still at length=None (no
+    override matched) that targets a length_configurable dialect is a
+    decision the caller could make differently — surface it.
+    """
+    decisions: List[ColumnLengthDecision] = []
+    for col in ir_table.columns:
+        if col.data_type.generic_type != GenericType.TEXT or col.data_type.length is not None:
+            continue
+        config = mapper.get_text_length_config(target_dialect)
+        if config is None or config.get("default_length") is None:
+            continue
+        decisions.append(ColumnLengthDecision(
+            table=_qualified_table_name(ir_table) or ir_table.name,
+            column=col.name,
+            source_type=col.data_type.original_type_string or "STRING",
+            applied_default=config["default_length"],
+            max_length=config["max_length"],
+            allows_max=config.get("allows_max", False),
+        ))
+    return decisions
 
 
 def _dedupe_warnings(warnings: List[IRWarning]) -> List[IRWarning]:
@@ -206,6 +272,8 @@ class Transpiler:
         target_dialect: str,
         object_type: Optional[str] = None,
         target_schema: Optional[str] = None,
+        column_overrides: Optional[List[Dict[str, object]]] = None,
+        default_text_length: Optional[int] = None,
     ) -> TranspileResult:  # noqa: C901
         """
         Convert SQL DDL from source_dialect to target_dialect.
@@ -218,6 +286,14 @@ class Transpiler:
             target_schema:   When provided, overrides the schema qualifier on every
                              generated object (Dynamic mode). Pass None to preserve
                              source schema names (Hardcoded mode).
+            column_overrides: Optional per-column length overrides, each
+                             {"table": "schema.table" or "table", "column": "name",
+                             "length": int}, for columns whose source type was an
+                             unbounded string but the target needs a bounded
+                             VARCHAR-family length (see TranspileResult.length_decisions).
+            default_text_length: Optional length applied to every such column that
+                             has no more specific column_overrides entry — a bulk
+                             convenience distinct from per-column overrides.
 
         Returns:
             TranspileResult with converted_sql, warnings, unsupported_features, doc_references.
@@ -267,7 +343,9 @@ class Transpiler:
         all_doc_refs: List[IRDocReference] = []
         output_parts: List[str] = []
         objects: List[TranspiledObject] = []
+        all_length_decisions: List[ColumnLengthDecision] = []
         detected_object_type = ObjectType.TABLE
+        type_mapper = TypeMapper.get()
 
         parse_results = parser.parse(sql)
 
@@ -281,6 +359,10 @@ class Transpiler:
             # Dynamic schema override — replace schema qualifier on every object
             if target_schema is not None and hasattr(ir_obj, "schema_name"):
                 ir_obj.schema_name = target_schema.strip() or None
+
+            if isinstance(ir_obj, IRTable):
+                _apply_column_overrides(ir_obj, column_overrides, default_text_length)
+                all_length_decisions.extend(_collect_length_decisions(ir_obj, tgt, type_mapper))
 
             # Determine object type for the result metadata
             if isinstance(ir_obj, IRTable):
@@ -363,6 +445,7 @@ class Transpiler:
             confidence_score=confidence_score,
             confidence_level=confidence_level,
             elapsed_ms=elapsed_ms,
+            length_decisions=all_length_decisions,
         )
 
     @classmethod
