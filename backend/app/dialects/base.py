@@ -300,6 +300,11 @@ class TypeMapper:
 
         # Types that carry (n) length
         if generic_type in (GenericType.VARCHAR, GenericType.CHAR):
+            # STRING (BigQuery, Databricks, Fabric Lakehouse/Spark SQL) is
+            # unbounded and does not accept a length parameter — appending
+            # one produces invalid DDL (e.g. "STRING(256)" fails to parse).
+            if base_type.upper() == "STRING":
+                return base_type
             if length is not None:
                 # Respect max_length constraint from dialect entry
                 max_len = dialect_entry.get("max_length")

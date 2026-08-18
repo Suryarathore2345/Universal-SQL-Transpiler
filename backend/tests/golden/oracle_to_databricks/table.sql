@@ -2,7 +2,7 @@ CREATE TABLE `hr`.`orders` (
     `order_id` BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) NOT NULL,
     `customer_id` DECIMAL(10) NOT NULL,
     `amount` DECIMAL(18,2) NOT NULL,
-    `status` STRING(32) DEFAULT 'pending',
+    `status` STRING DEFAULT 'pending',
     `created_at` TIMESTAMP_NTZ NOT NULL,
     PRIMARY KEY (`order_id`) NOT ENFORCED
 )
