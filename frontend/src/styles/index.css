@@ -1466,6 +1466,104 @@ button { cursor: pointer; font-family: inherit; }
 .schema-name-input:disabled { opacity: 0.4; cursor: not-allowed; }
 .schema-name-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
+/* ============================================================
+   Advanced options row (Customize string lengths toggle)
+   ============================================================ */
+
+.options-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+/* ============================================================
+   Column Lengths Panel
+   ============================================================ */
+
+.length-decisions-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.length-bulk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.length-input {
+  width: 90px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.length-input:focus { border-color: var(--accent-purple); }
+.length-input-bulk { width: 110px; }
+
+.btn-length-apply-all {
+  background: rgba(124,58,237,0.1);
+  border: 1px solid rgba(124,58,237,0.3);
+  border-radius: var(--radius-sm);
+  color: var(--accent-purple);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-length-apply-all:hover:not(:disabled) { background: rgba(124,58,237,0.2); }
+.btn-length-apply-all:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.length-decision-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+}
+
+.length-decision-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.length-decision-label code {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.length-decision-source {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.length-decision-range {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── legacy stub kept for reference — .btn-schema-gen and .sg-* removed ── */
 .btn-schema-gen-REMOVED {
   background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(37,99,235,0.15));
