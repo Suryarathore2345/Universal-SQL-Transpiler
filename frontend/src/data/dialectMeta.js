@@ -16,6 +16,15 @@ export const DIALECT_COLORS = {
   bigquery:   { primary: '#4285F4', secondary: '#34A853', glow: 'rgba(66,133,244,0.15)' },
 }
 
+// ── Target dialects whose unbounded-string mapping (TEXT → VARCHAR(n)) is
+//    length-configurable ── mirrors `length_configurable: true` entries in
+//    backend/app/type_mappings/type_mappings.yaml under GenericType.TEXT.
+//    Dialects not in this set have a truly unbounded native type (STRING/
+//    TEXT/CLOB/VARCHAR(MAX)) with no length decision to make, so the
+//    "Customize string lengths" toggle is disabled for them regardless of
+//    source dialect. Keep in sync if the backend config changes.
+export const LENGTH_CUSTOMIZABLE_TARGETS = new Set(['fabric_dw', 'synapse', 'redshift'])
+
 // ── Sample DDL per SOURCE dialect ─────────────────────────────────────────
 // Each uses that dialect's native syntax so the user sees realistic input.
 

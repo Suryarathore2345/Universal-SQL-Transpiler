@@ -26,7 +26,7 @@ import UploadButton from './components/UploadButton.jsx'
 import DownloadMenu from './components/DownloadMenu.jsx'
 import { fetchDialects, fetchLimitations, transpile, BASE as API_BASE } from './api/transpiler.js'
 import { replayIntro } from './components/LandingAnimation/LandingAnimation.jsx'
-import { DIALECT_COLORS, DIALECT_SAMPLES } from './data/dialectMeta.js'
+import { DIALECT_COLORS, DIALECT_SAMPLES, LENGTH_CUSTOMIZABLE_TARGETS } from './data/dialectMeta.js'
 
 export default function App() {
   const [dialects, setDialects]       = useState([])
@@ -166,6 +166,24 @@ export default function App() {
     })
   }, [])
 
+  // The target dialect's unbounded-string type may or may not be
+  // length-configurable (Fabric DW/Synapse/Redshift are; BigQuery/
+  // Databricks/Fabric Lakehouse/Snowflake/Oracle/SQL Server aren't — their
+  // native equivalent is already unbounded, so there's nothing to decide).
+  // Disable the toggle for those targets rather than letting the user turn
+  // it on only to find the panel never appears.
+  const lengthCustomizationSupported = LENGTH_CUSTOMIZABLE_TARGETS.has(targetDialect)
+
+  // If the target dialect changes to one that doesn't support it while the
+  // toggle is on, reset — same clean-reset behavior as turning it off by hand.
+  useEffect(() => {
+    if (!lengthCustomizationSupported && customizeLengths) {
+      setCustomizeLengths(false)
+      setLengthDecisions([])
+      setLengthOverrides({})
+    }
+  }, [lengthCustomizationSupported, customizeLengths])
+
   // Keyboard shortcut: Ctrl+Enter / Cmd+Enter
   useEffect(() => {
     function onKey(e) {
@@ -277,8 +295,12 @@ export default function App() {
           <button
             className={`btn-schema-mode ${customizeLengths ? 'btn-schema-mode--active' : ''}`}
             onClick={handleToggleCustomizeLengths}
-            disabled={loading}
-            title="When on, columns whose source type is an unbounded string (e.g. Databricks STRING) let you pick the target VARCHAR length instead of using the dialect default"
+            disabled={loading || !lengthCustomizationSupported}
+            title={
+              lengthCustomizationSupported
+                ? 'When on, columns whose source type is an unbounded string (e.g. Databricks STRING) let you pick the target VARCHAR length instead of using the dialect default'
+                : `${tgtDialect?.short_name ?? targetDialect}'s unbounded-string type has no length to configure — this only applies to Fabric DW, Synapse, and Redshift targets`
+            }
           >
             Customize string lengths: {customizeLengths ? 'On' : 'Off'}
           </button>
