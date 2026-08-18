@@ -581,9 +581,9 @@ generic_types:
         doc_url: "https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql"
         confidence: verified
       fabric_dw:
-        type: "VARCHAR(MAX)"
+        type: "VARCHAR(8000)"
         aliases: []
-        notes: "Fabric DW VARCHAR(MAX) capped at 16MB. TEXT/NTEXT not supported — use VARCHAR."
+        notes: "Fabric DW: VARCHAR(MAX) is supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode). VARCHAR(8000) is the practical max for a bounded column; TEXT/NTEXT are not supported."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
       fabric_lakehouse:
@@ -593,9 +593,9 @@ generic_types:
         doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
-        type: "VARCHAR(MAX)"
+        type: "VARCHAR(8000)"
         aliases: []
-        notes: "Synapse: text/ntext unsupported; use VARCHAR(MAX). Prefer VARCHAR(8000) for perf."
+        notes: "Synapse: text/ntext unsupported. VARCHAR(MAX) is supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode); VARCHAR(8000) is the practical max for a bounded column."
         doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
         confidence: verified
       oracle:
