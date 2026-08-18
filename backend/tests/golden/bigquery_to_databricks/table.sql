@@ -2,7 +2,7 @@ CREATE OR REPLACE TABLE `analytics`.`orders` (
     `order_id` BIGINT NOT NULL,
     `customer_id` BIGINT NOT NULL,
     `amount` DECIMAL(18,2) NOT NULL,
-    `status` CHAR DEFAULT 'pending',
+    `status` STRING DEFAULT 'pending',
     `created_at` TIMESTAMP NOT NULL
 )
 USING DELTA

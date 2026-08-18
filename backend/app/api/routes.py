@@ -166,6 +166,8 @@ async def transpile(request: TranspileRequest) -> TranspileResponse:
             target_dialect=request.target_dialect,
             object_type=request.object_type,
             target_schema=request.target_schema or None,
+            column_overrides=[o.model_dump() for o in request.column_overrides] if request.column_overrides else None,
+            default_text_length=request.default_text_length,
         )
     except Exception as exc:
         logger.exception("Transpiler error [%s]: %s", request_id, exc)

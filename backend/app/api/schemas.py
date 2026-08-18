@@ -20,6 +20,13 @@ from app.ir.models import ObjectType
 # Request
 # ---------------------------------------------------------------------------
 
+class ColumnOverride(BaseModel):
+    """One per-column length override — see TranspileRequest.column_overrides."""
+    table: str = Field(..., description="Table name, optionally schema-qualified (e.g. 'orders' or 'public.orders')")
+    column: str = Field(..., description="Column name")
+    length: int = Field(..., ge=1, description="Desired VARCHAR-family length for this column")
+
+
 class TranspileRequest(BaseModel):
     """
     POST /api/transpile  request body.
@@ -34,6 +41,17 @@ class TranspileRequest(BaseModel):
     target_schema:   When provided, overrides the schema qualifier on every
                      generated object (Dynamic mode). Omit to preserve the
                      original schema names from the source SQL (Hardcoded mode).
+    column_overrides: Opt-in per-column length overrides for columns whose
+                     source type was an unbounded string (e.g. Databricks
+                     STRING) but the target dialect only has a bounded
+                     VARCHAR-family type (Fabric DW/Synapse/Redshift). Omit
+                     entirely and the response's `length_decisions` list
+                     (populated whenever such a column exists) tells the
+                     caller what was defaulted and lets them resubmit with
+                     this field set — existing callers see no change in
+                     behavior if they never send it.
+    default_text_length: Bulk convenience — applied to every such column that
+                     has no more specific column_overrides entry.
     """
 
     # max_length caps request-body size: without it, a single oversized SQL
@@ -49,6 +67,8 @@ class TranspileRequest(BaseModel):
     object_type: Optional[ObjectType] = Field(None, description="Optional object type hint")
     include_ir: bool = Field(False, description="Include IR snapshot in response")
     target_schema: Optional[str] = Field(None, description="Schema override (Dynamic mode)")
+    column_overrides: Optional[List[ColumnOverride]] = Field(None, description="Opt-in per-column length overrides")
+    default_text_length: Optional[int] = Field(None, ge=1, description="Bulk default length for unmatched columns")
 
     @field_validator("sql")
     @classmethod
@@ -103,6 +123,22 @@ class TranspiledObjectDetail(BaseModel):
     sql: str
 
 
+class LengthDecisionDetail(BaseModel):
+    """
+    One column whose length was defaulted because the source type was an
+    unbounded string. The frontend should render an editable "column
+    lengths" panel from this list (only when non-empty) and, on resubmit,
+    pass the user's chosen values back as TranspileRequest.column_overrides.
+    """
+    table: str
+    column: str
+    source_type: str
+    applied_default: int
+    min_length: int = 1
+    max_length: int
+    allows_max: bool = False
+
+
 class TranspileResponse(BaseModel):
     """
     POST /api/transpile  response body.
@@ -133,6 +169,9 @@ class TranspileResponse(BaseModel):
 
     # Phase 8 — latency
     elapsed_ms: int = 0
+
+    # Opt-in column-length decisions — see LengthDecisionDetail.
+    length_decisions: List[LengthDecisionDetail] = Field(default_factory=list)
 
     @classmethod
     def from_transpile_result(cls, result, include_ir: bool = False) -> "TranspileResponse":
@@ -172,6 +211,18 @@ class TranspileResponse(BaseModel):
             )
             for w in getattr(result, "residual_warnings", [])
         ]
+        length_decisions = [
+            LengthDecisionDetail(
+                table=d.table,
+                column=d.column,
+                source_type=d.source_type,
+                applied_default=d.applied_default,
+                min_length=d.min_length,
+                max_length=d.max_length,
+                allows_max=d.allows_max,
+            )
+            for d in getattr(result, "length_decisions", [])
+        ]
         ir_snapshot = result.ir_snapshot if include_ir else None
         objects = [
             TranspiledObjectDetail(
@@ -199,6 +250,7 @@ class TranspileResponse(BaseModel):
             residual_warnings=residuals,
             residual_count=len(residuals),
             elapsed_ms=getattr(result, "elapsed_ms", 0),
+            length_decisions=length_decisions,
         )
 
 

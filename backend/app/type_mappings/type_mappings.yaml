@@ -446,7 +446,8 @@ generic_types:
       bigquery:
         type: "STRING"
         aliases: []
-        notes: "BigQuery has no CHAR type; maps to STRING. Length constraint not enforced."
+        primary_reverse_match: false
+        notes: "BigQuery has no CHAR type; maps to STRING. Length constraint not enforced. Bare STRING (no length) belongs to GenericType.TEXT — see that entry."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
         confidence: verified
       databricks:
@@ -469,7 +470,8 @@ generic_types:
       fabric_lakehouse:
         type: "STRING"
         aliases: ["CHAR", "CHARACTER"]
-        notes: "Spark SQL maps all CHAR types to STRING. Length constraints are not enforced."
+        primary_reverse_match: false
+        notes: "Spark SQL maps all CHAR types to STRING. Length constraints are not enforced. Bare STRING (no length) belongs to GenericType.TEXT — see that entry."
         doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
@@ -506,13 +508,15 @@ generic_types:
       bigquery:
         type: "STRING"
         aliases: ["VARCHAR"]
-        notes: "BigQuery STRING is variable-length; no length limit. VARCHAR is an alias."
+        primary_reverse_match: false
+        notes: "BigQuery STRING is variable-length; no length limit. VARCHAR is an alias. Bare STRING (no length) belongs to GenericType.TEXT — see that entry."
         doc_url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#string_type"
         confidence: verified
       databricks:
         type: "STRING"
         aliases: ["VARCHAR", "CHAR VARYING"]
-        notes: "Databricks STRING has no length limit. VARCHAR(n) is supported for compatibility."
+        primary_reverse_match: false
+        notes: "Databricks STRING has no length limit. VARCHAR(n) is supported for compatibility. Bare STRING (no length) belongs to GenericType.TEXT — see that entry."
         doc_url: "https://docs.databricks.com/en/sql/language-manual/sql-ref-datatypes.html"
         confidence: verified
       sqlserver:
@@ -532,7 +536,8 @@ generic_types:
       fabric_lakehouse:
         type: "STRING"
         aliases: ["VARCHAR", "CHARACTER VARYING"]
-        notes: "Spark SQL STRING has no length limit. VARCHAR(n) maps to STRING (length not enforced)."
+        primary_reverse_match: false
+        notes: "Spark SQL STRING has no length limit. VARCHAR(n) maps to STRING (length not enforced). Bare STRING (no length) belongs to GenericType.TEXT — see that entry."
         doc_url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html"
         confidence: verified
       synapse:
@@ -555,7 +560,12 @@ generic_types:
       redshift:
         type: "VARCHAR(65535)"
         aliases: ["TEXT"]
-        notes: "Redshift TEXT = VARCHAR(256). For max: use VARCHAR(65535)."
+        length_configurable: true
+        bounded_base_type: "VARCHAR"
+        default_length: 65535
+        max_length: 65535
+        allows_max: false
+        notes: "Redshift TEXT = VARCHAR(256). For max: use VARCHAR(65535). Redshift has no MAX keyword — 65535 is the true ceiling."
         doc_url: "https://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html"
         confidence: verified
       snowflake:
@@ -583,7 +593,12 @@ generic_types:
       fabric_dw:
         type: "VARCHAR(8000)"
         aliases: []
-        notes: "Fabric DW: VARCHAR(MAX) is supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode). VARCHAR(8000) is the practical max for a bounded column; TEXT/NTEXT are not supported."
+        length_configurable: true
+        bounded_base_type: "VARCHAR"
+        default_length: 8000
+        max_length: 8000
+        allows_max: false
+        notes: "Fabric DW: VARCHAR(MAX) is technically supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode) — deliberately not offered. 8000 is the hard ceiling used here for any column length, including user overrides."
         doc_url: "https://learn.microsoft.com/en-us/fabric/data-warehouse/data-types"
         confidence: verified
       fabric_lakehouse:
@@ -595,7 +610,12 @@ generic_types:
       synapse:
         type: "VARCHAR(8000)"
         aliases: []
-        notes: "Synapse: text/ntext unsupported. VARCHAR(MAX) is supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode); VARCHAR(8000) is the practical max for a bounded column."
+        length_configurable: true
+        bounded_base_type: "VARCHAR"
+        default_length: 8000
+        max_length: 8000
+        allows_max: false
+        notes: "Synapse: text/ntext unsupported. VARCHAR(MAX) is technically supported but hurts query optimization (no statistics, forces certain operators to spill/row-mode) — deliberately not offered. 8000 is the hard ceiling used here for any column length, including user overrides."
         doc_url: "https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/develop-tables-data-types"
         confidence: verified
       oracle:
